@@ -4,6 +4,10 @@ import pygame, sys
 from pygame.locals import QUIT
 
 class Snake:
+    """
+    Snake class that contains the snake body to be displayed in the game, 
+    along with associated methods to manipulate it.
+    """
     def __init__(self) -> None:
         """
         Constructor to initialize the snake.
