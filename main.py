@@ -1,17 +1,37 @@
 from rich.traceback import install; install()
 from rich import print
-import pygame, sys
+import pygame, sys, random
+from time import sleep
 from pygame.locals import QUIT
+from PIL import Image,ImageFilter
+
+# TODO:
+# Win code
+# Lose code
+# Icons/Sprites
+# Audio
+# Leaderboards
+# Fix timer (maybe good enough solution?)
+# Apples
+# Apple bags
+# Add pause
+# Convert to exe
+# Check viability on mav
+
 
 
 FPS = 60
-HEIGHT = 400
+HEIGHT = 500
 WIDTH = 500
 GRID_SIZE = (20,20)
 # Calculate dimensions of snake tile based on grid & and window dimensions
 SNAKE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])
+PAUSE_DELAY = 0
 
-paused = (False, "")
+paused = (True, "START")
+background = pygame.display.set_mode((WIDTH, HEIGHT)) # Sets window size
+
+
 
 
 class Snake:
@@ -35,39 +55,53 @@ class Snake:
             direction: Specify the direction in which to move the snake.
             eaten (bool, optional): Specify whether the snake has eaten this iteration. Defaults to False.
         """
-        global paused
+        global paused,background
         
         head = self.body[0]
         newhead = [0,0,None]
         
-        if direction == "left":
+        if direction == pygame.K_LEFT:
             if head[0] == 0:                                    # Screen wrap check
                 newhead = [WIDTH-SNAKE_DIMENSIONS[0], head[1]]
             else:
                 newhead = [head[0]-SNAKE_DIMENSIONS[0], head[1]]
-        elif direction == "right":
+        elif direction == pygame.K_RIGHT:
             if head[0] == WIDTH-SNAKE_DIMENSIONS[0]:            # Screen wrap check
                 newhead = [0, head[1]]
             else:
                 newhead = [head[0]+SNAKE_DIMENSIONS[0], head[1]]
-        elif direction == "up":
+        elif direction == pygame.K_UP:
             if head[1] == 0:                                    # Screen wrap check
                 newhead = [head[0], HEIGHT-SNAKE_DIMENSIONS[1]]
             else:
                 newhead = [head[0], head[1]-SNAKE_DIMENSIONS[1]]
-        elif direction == "down":
+        elif direction == pygame.K_DOWN:
             if head[1] == HEIGHT-SNAKE_DIMENSIONS[1]:           # Screen wrap check
                 newhead = [head[0], 0]
             else:
                 newhead = [head[0], head[1]+SNAKE_DIMENSIONS[1]]
            
         
-        # Checks if snake has hit itself, if so, highlight head as red and end game
+        # Checks if snake has hit itself, if so, color it red and end game
         for tile in self.body[1:]:
             if newhead[0] == tile[0] and newhead[1] == tile[1]:
-                print("DEATH")
                 paused = (True, "DEATH")
-                self.body[0][2].fill("red")
+                # Color snake red
+                for _ in range(5):
+                    for x,y,tile in self.body:
+                        tile.fill("#006432")
+                        background.blit(tile,(x, y))
+                    pygame.display.flip() 
+                    sleep(0.25)
+                    for x,y,tile in self.body:
+                        tile.fill("#880000")
+                        background.blit(tile,(x, y))
+                    pygame.display.flip() 
+                    sleep(0.25)
+                
+                
+                for _,_,tile in self.body[1:]:
+                    tile.fill("#880000")
         
         
         
@@ -76,13 +110,10 @@ class Snake:
             newhead[2].fill("white")
             self.body.insert(0, newhead)
             
-            if not eaten:
+            if not eaten and not paused[0]:     # Pops tail snake has not died
                 self.body.pop()
         except: # Expected exception, no need to handle
             pass
-
-
-
 
 
 
@@ -92,14 +123,13 @@ def main():
     Main loop: Run upon execution.
     Initializes board, variables and begins pygame window-loop.
     """
-    global paused
+    global paused, background
     snake = Snake() # Create snake
     
     pygame.init() # Initializes pygame module
-    clock = pygame.time.Clock() # FPS object
-    background = pygame.display.set_mode((WIDTH, HEIGHT)) # Sets window size
     pygame.display.set_caption("Snake") # Sets window title
-    direction = None
+    clock = pygame.time.Clock() # FPS object
+    direction = pygame.K_RIGHT
     loop_ctr = 1
     apple = False
     
@@ -109,36 +139,64 @@ def main():
         """
         
         # Event checking
-        for event in pygame.event.get(): # Gets a list of all events
-            if event.type == QUIT: # Checks if X is clicked
-                pygame.quit() # Closes window
-                sys.exit() # Closes program
+        for event in pygame.event.get():    # Gets a list of all events
+            if event.type == QUIT:          # Checks if X is clicked
+                pygame.quit()               # Closes window
+                sys.exit()                  # Closes program
             
-            if event.type == pygame.KEYDOWN: # Checks if left,right,up or down arrow keys were pressed
-                if event.key == pygame.K_LEFT:
-                    direction = "left"
-                if event.key == pygame.K_RIGHT:
-                    direction = "right"
-                if event.key == pygame.K_UP:
-                    direction = "up"
-                if event.key == pygame.K_DOWN:
-                    direction = "down"
-                if event.key == pygame.K_SPACE:
-                    apple = True if not apple else False
+            if not paused[0]:   # Pause check
+                if event.type == pygame.KEYDOWN:
+                    # Update move direction
+                    if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+                        direction = event.key
+                        
+                    # Temporarily toggles simulating an apple
+                    elif event.key == pygame.K_SPACE:
+                        apple = True if not apple else False
+                        
+            else:
+                if paused[1] == "PAUSE":
+                # Gray out tiles when paused
+                    for _,_,tile in snake.body[1:]:
+                        tile.fill("#888888")
+                        
+                if event.type == pygame.KEYDOWN:
+                    # Delay for 3 seconds before unpausing
+                    for i in range(PAUSE_DELAY):
+                        print(f"{PAUSE_DELAY - i}...", end="\r")
+                        sleep(1)
+                        
+                    # Update move direction when unpausing <----- LIFEHACK 👀
+                    if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+                        direction = event.key
+                        
+                    # Unpause
+                    paused = (not paused[0], paused[1])
+                elif paused[1] == "START":
+                    snake.body[0][2].fill("#888888")
+                elif paused[1] == "DEATH":
+                    pass
+                    # TODO:
+                    # What do we do on death?
+                elif paused[1] == "WIN":
+                    pass
+                    # TODO:
+                    # What do we do on win?
+        
                 
         # TODO:
         # On set time intervals, randomly decide whether or not to generate an apple if not present already.
         # Add apple-bag power-up
-        # Sprites
-        # Convert to exe, add installation commands, check if works on mac
 
+        
+        
         # Move snake head when loop_ctr has reset
         # !!!!! Bad solution as loops are unreliable measurements of time. Consider instead replacing with a time module timer, or using clock.time()/clock.raw_time()
-        if loop_ctr == 1 and paused[0] == False:
+        if loop_ctr == 1 and not paused[0]:
             snake.move(direction,apple)
         
         # Refill background
-        background.fill((0, 100, 50)) # Sets background color
+        background.fill("#006432") # Sets background color
         
         # Draw objects (in this case: snake)
         for tile in snake.body:
