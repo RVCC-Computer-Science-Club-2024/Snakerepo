@@ -12,7 +12,6 @@ from PIL import Image,ImageFilter
 # Audio
 # Leaderboards
 # Fix timer (maybe good enough solution?)
-# Apples
 # Apple bags
 # Add pause
 # Convert to exe
@@ -83,17 +82,17 @@ class Snake:
            
         # Checks if snake has eaten apple, if so, grow snake
         eaten = False
-        if apple:
-            if newhead[0] == apple[0] and newhead[1] == apple[1]:
-                eaten = True
-                print(f"Snake length increased to: {len(self.body)}")
+        if newhead[0] == apple[0] and newhead[1] == apple[1]:
+            eaten = True
+            print(f"Snake length increased to: {len(self.body)}")
         
         
         # Checks if snake has hit itself, if so, color it red and end game
         for tile in self.body[1:]:
             if newhead[0] == tile[0] and newhead[1] == tile[1]:
                 paused = (True, "DEATH")
-                # Color snake red
+                
+                # Blink snake body
                 for _ in range(5):
                     for x,y,tile in self.body:
                         tile.fill("#006432")
@@ -106,9 +105,8 @@ class Snake:
                     pygame.display.flip() 
                     sleep(0.25)
                 
-                
-                for _,_,tile in self.body[1:]:
-                    tile.fill("#888888")
+                if apple:
+                    apple[2].fill("red")
         
         
         
@@ -126,6 +124,26 @@ class Snake:
 
 
 
+def spawn_apple(snake) -> tuple:
+    """
+    Spawns an apple on a random position on the board.
+
+    Args:
+        snake (Snake): Snake object.
+        
+    Returns:
+        tuple: Apple object with co-ordinates and surface.
+    """
+    good_coordinates_flag = False
+    while not good_coordinates_flag:
+        x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
+        snake_coords = [tile[:2] for tile in snake.body]
+        good_coordinates_flag = not [x,y] in snake_coords
+    apple = (x, y, pygame.Surface(TILE_DIMENSIONS))
+    apple[2].fill("red")
+    print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
+    
+    return apple
 
 def main():
     """
@@ -140,7 +158,8 @@ def main():
     clock = pygame.time.Clock() # FPS object
     direction = pygame.K_RIGHT
     loop_ctr = 1
-    apple = None
+    # Create apple and ensure it does not spawn on the initial snake head
+    apple = spawn_apple(snake)
     
     while True:
         """
@@ -189,38 +208,26 @@ def main():
                             
                         # Unpause
                         paused = (not paused[0], paused[1])
-        
-                
-        # TODO:
-        # On set time intervals, randomly decide whether or not to generate an apple if not present already.
-        # Add apple-bag power-up
-
-        # Randomly generate apple on board
-        if not apple and not paused[0]:
-            good_coordinates_flag = False
-            while not good_coordinates_flag:
-                x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
-                snake_coords = [tile[:2] for tile in snake.body]
-                good_coordinates_flag = not [x,y] in snake_coords
-            apple = (x, y, pygame.Surface(TILE_DIMENSIONS))
-            apple[2].fill("red")
-            print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
-        
+                        
         
         # Move snake head when loop_ctr has reset
         # !!!!! Bad solution as loops are unreliable measurements of time. Consider instead replacing with a time module timer, or using clock.time()/clock.raw_time()
         if loop_ctr == 1 and not paused[0]:
             eaten = snake.move(direction, apple)
-            apple = None if eaten else apple
+            apple = spawn_apple(snake) if eaten else apple
+
+        
+        # TODO:
+        # Add apple-bag power-up
+        
         
         # Refill background
         background.fill("#006432") # Sets background color
         
-        # Draw objects (in this case: snake)
+        # Draw objects
         for tile in snake.body:
             background.blit(tile[2],(tile[0], tile[1]))
-        if apple:
-            background.blit(apple[2],(apple[0], apple[1]))
+        background.blit(apple[2],(apple[0], apple[1]))
             
         # Game loop
         pygame.display.flip() # Updates screen, completes one loop
