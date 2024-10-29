@@ -19,16 +19,23 @@ from PIL import Image,ImageFilter
 
 
 
-FPS = 60
+# Game is updated/cycled every LOOP_DELAY loops
+# In other words, ~Loop execution time/LOOP_DELAY seconds per loop
+#       >>>>      WTF IS LOOP EXECUTION TIME???  There has to be a better way to measure loop time than this    <<<<<
+#       >>>>      Refer to "Move snake head when loop_ctr has reset" comment in main loop ~line 240             <<<<<
+
+LOOP_DELAY = 10         # We don't want the game running this fast, or the snake ZOOMS, so we delay the game loop by this many loops
+
+FPS = 60                # Ensures that at LEAST this many frames render per loop
 HEIGHT = 500
 WIDTH = 500
 GRID_SIZE = (20,20)
-# Calculate dimensions of snake tile based on grid & and window dimensions
-TILE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])
+TILE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])     # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 0
 
 paused = (True, "START")
-background = pygame.display.set_mode((WIDTH, HEIGHT)) # Sets window size
+background = pygame.display.set_mode((WIDTH, HEIGHT))           # Sets window size
+movement_disabled = False
 
 
 
@@ -45,6 +52,10 @@ class Snake:
         """
         self.body = [[random.randint(0,GRID_SIZE[0]-1)*TILE_DIMENSIONS[0],random.randint(0,GRID_SIZE[1]-1)*TILE_DIMENSIONS[1],pygame.Surface(TILE_DIMENSIONS)]]
         self.body[0][2].fill("white")
+        # Add 2 more body tiles
+        for i in range(2):
+            makeshift_food = (self.body[0][0], self.body[0][1])
+            self.move(pygame.K_UP, makeshift_food)
     
     def move(self, direction, apple):
         """
@@ -54,7 +65,7 @@ class Snake:
             direction: Specify the direction in which to move the snake.
             eaten (bool, optional): Specify whether the snake has eaten this iteration. Defaults to False.
         """
-        global paused,background
+        global paused, background, movement_disabled
         
         head = self.body[0]
         newhead = [0,0,None]
@@ -104,10 +115,6 @@ class Snake:
                         background.blit(tile,(x, y))
                     pygame.display.flip() 
                     sleep(0.25)
-                
-                if apple:
-                    apple[2].fill("red")
-        
         
         
         try:    # Throws an error if direction = None
@@ -119,6 +126,9 @@ class Snake:
                 self.body.pop()
         except: # Expected exception, no need to handle
             pass
+        
+        # Re-enable movement
+        movement_disabled = False
         
         return eaten    # Returns whether snake has eaten this frame or not
 
@@ -145,12 +155,14 @@ def spawn_apple(snake) -> tuple:
     
     return apple
 
+
+
 def main():
     """
     Main loop: Run upon execution.
     Initializes board, variables and begins pygame window-loop.
     """
-    global paused, background
+    global paused, background, movement_disabled
     snake = Snake() # Create snake
     
     pygame.init() # Initializes pygame module
@@ -174,33 +186,33 @@ def main():
             
             if not paused[0]:   # Pause check
                 if event.type == pygame.KEYDOWN:
+                    # Guard-rails so you can't die by moving directly backwards into yourself
+                    dont_move_this_way = {pygame.K_LEFT: pygame.K_RIGHT, pygame.K_RIGHT: pygame.K_LEFT, pygame.K_UP: pygame.K_DOWN, pygame.K_DOWN: pygame.K_UP}
                     # Update move direction
-                    if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+                    if event.key in dont_move_this_way.keys() and dont_move_this_way[event.key] != direction and not movement_disabled:
                         direction = event.key
+                        # Disable movement until 1 movement has been done
+                        movement_disabled = True
+                    
+                    # Pause when ESC is pressed
+                    if event.key == pygame.K_ESCAPE:
+                        paused = (True, "PAUSE")
                         
             else:
-                if paused[1] == "PAUSE":
+                if paused[1] in ("PAUSE", "START"):
                 # Gray out tiles when paused
                     for _,_,tile in snake.body[1:]:
                         tile.fill("#777777")
-                elif paused[1] == "START":
-                    snake.body[0][2].fill("#777777")
-                elif paused[1] == "DEATH":
-                    pass
-                    # TODO:
-                    # What do we do on death?
-                elif paused[1] == "WIN":
-                    pass
-                    # TODO:
-                    # What do we do on win?
-                    
-                
-                if paused[1] in ("PAUSE", "START"):
+                        
                     if event.type == pygame.KEYDOWN:
                         # Delay for 3 seconds before unpausing
                         for i in range(PAUSE_DELAY):
                             print(f"Unpausing in {PAUSE_DELAY - i}...", end="\r")
                             sleep(1)
+                        
+                        # White back tiles when unpaused
+                        for _,_,tile in snake.body[1:]:
+                            tile.fill("white")
                             
                         # Update move direction when unpausing <----- LIFEHACK 👀
                         if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
@@ -208,6 +220,16 @@ def main():
                             
                         # Unpause
                         paused = (not paused[0], paused[1])
+                        
+                elif paused[1] == "DEATH":
+                    pass
+                    # TODO:
+                    # What do we do on death?
+                    
+                elif paused[1] == "WIN":
+                    pass
+                    # TODO:
+                    # What do we do on win?
                         
         
         # Move snake head when loop_ctr has reset
@@ -232,7 +254,7 @@ def main():
         # Game loop
         pygame.display.flip() # Updates screen, completes one loop
         clock.tick(FPS) # Ensures a max of 60 FPS
-        if loop_ctr % (10) == 0: # Loop counter - resets every 50 loops, 
+        if loop_ctr % (LOOP_DELAY) == 0: # Loop counter - resets every 50 loops, 
             loop_ctr = 1
         else:
             loop_ctr += 1
