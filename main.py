@@ -31,7 +31,7 @@ HEIGHT = 500
 WIDTH = 500
 GRID_SIZE = (20,20)
 TILE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])     # Calculate dimensions of snake tile based on grid & and window dimensions
-PAUSE_DELAY = 0
+PAUSE_DELAY = 3
 
 paused = (True, "START")
 background = pygame.display.set_mode((WIDTH, HEIGHT))           # Sets window size
@@ -207,7 +207,16 @@ def main():
                     if event.type == pygame.KEYDOWN:
                         # Delay for 3 seconds before unpausing
                         for i in range(PAUSE_DELAY):
-                            print(f"Unpausing in {PAUSE_DELAY - i}...", end="\r")
+                            # print(f"Unpausing in {PAUSE_DELAY - i}...", end="\r")
+
+                            font = pygame.font.Font(None, 36)
+                            textPause = font.render(str(PAUSE_DELAY - i), 1, (255, 255, 255))
+                            background.blit(textPause, (WIDTH // 2, HEIGHT // 2))
+                            pygame.display.update()
+                            background.fill("#006432")
+                            for tile in snake.body[1:]:
+                                background.blit(tile[2], (tile[0], tile[1]))
+                            background.blit(apple[2], (apple[0], apple[1]))
                             sleep(1)
                         
                         # White back tiles when unpaused
