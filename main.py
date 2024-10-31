@@ -33,6 +33,8 @@ GRID_SIZE = (20,20)
 TILE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])     # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 3
 
+DARK_GREEN = "#006432"
+
 paused = (True, "START")
 background = pygame.display.set_mode((WIDTH, HEIGHT))           # Sets window size
 movement_disabled = False
@@ -106,7 +108,7 @@ class Snake:
                 # Blink snake body
                 for _ in range(5):
                     for x,y,tile in self.body:
-                        tile.fill("#006432")
+                        tile.fill(DARK_GREEN)
                         background.blit(tile,(x, y))
                     pygame.display.flip() 
                     sleep(0.25)
@@ -213,7 +215,7 @@ def main():
                             textPause = font.render(str(PAUSE_DELAY - i), 1, (255, 255, 255))
                             background.blit(textPause, (WIDTH // 2, HEIGHT // 2))
                             pygame.display.update()
-                            background.fill("#006432")
+                            background.fill(DARK_GREEN)
                             for tile in snake.body[1:]:
                                 background.blit(tile[2], (tile[0], tile[1]))
                             background.blit(apple[2], (apple[0], apple[1]))
@@ -253,7 +255,7 @@ def main():
         
         
         # Refill background
-        background.fill("#006432") # Sets background color
+        background.fill(DARK_GREEN) # Sets background color
         
         # Draw objects
         for tile in snake.body:
