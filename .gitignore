@@ -166,3 +166,6 @@ cython_debug/
 .replit
 replit.nix
 pyproject.toml
+
+# Pipreqs artifacts
+requirements.txt
