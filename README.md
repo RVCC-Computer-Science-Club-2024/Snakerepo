@@ -12,7 +12,7 @@ Snake, made in Python from scratch; learning relevant skills as we go.
 **Ekaterina Elfimova** <br>
 **Jason Deitz** <br>
 **Minerva Paulet** <br>
-**Jose** <br>
+**Jose Moreno** <br>
 
 ## License:
 Content is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
