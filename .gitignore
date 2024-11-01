@@ -173,3 +173,5 @@ requirements.txt
 # Nuitka artifacts
 main.dist
 main.exe
+main.app
+Info.plist
