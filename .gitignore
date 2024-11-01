@@ -169,3 +169,7 @@ pyproject.toml
 
 # Pipreqs artifacts
 requirements.txt
+
+# Nuitka artifacts
+main.dist
+main.exe
