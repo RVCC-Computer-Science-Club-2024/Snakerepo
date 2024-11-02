@@ -2,17 +2,19 @@ from rich.traceback import install; install()
 from rich import print
 import pygame, sys, random
 from time import sleep
+from math import floor
 from pygame.locals import QUIT
 from PIL import Image,ImageFilter
 
 # TODO:
-# Win code
 # Lose & Restart code
+# Leaderboards & Score counter
+# Win code
 # Icons/Sprites
 # Audio
-# Leaderboards & Score Counter
-# Fix timer (maybe good enough solution?)
+# Code cleanup
 # Apple bags
+# Fix timer (maybe good enough solution?)
 
 
 # Game is updated/cycled every LOOP_DELAY loops
@@ -108,7 +110,7 @@ class Snake:
             for tile in self.body[2:]:
                 if newhead[0] == tile[0] and newhead[1] == tile[1]:
                     paused = [True, "EXTRA FRAME"]
-                    print("Extra frame flag set")
+                    # print("Extra frame flag set")
         else:
             paused[1] = ""
         
@@ -118,7 +120,7 @@ class Snake:
                 if newhead[0] == tile[0] and newhead[1] == tile[1]:
                     paused = [True, "DEATH"]
                     
-                    # Blink snake body
+                    # Blink snake body for 5 cycles upon death
                     for _ in range(5):
                         for x,y,tile in self.body:
                             tile.fill(DARK_GREEN)
@@ -149,6 +151,39 @@ class Snake:
         return eaten    # Returns whether snake has eaten this frame or not
 
 
+def update_screen(*args: tuple, snake: Snake, apple: tuple, font: pygame.font.Font) -> None:
+    """Draws objects to the screen and updates it
+
+    Args:
+        *args (tuple): Additional objects to be drawn to screen.\n
+                       Objects must be in the form of (Surface, x, y)
+        snake (Snake): Snake object.
+        apple (tuple): Apple object.
+        font (pygame.font.Font): Pygame font object.
+    """
+    global background
+    # Refill background
+    background.fill(DARK_GREEN) # Sets background color
+    
+    # Draw objects
+    for tile in snake.body:
+        background.blit(tile[2],(tile[0], tile[1]))
+    background.blit(apple[2],(apple[0], apple[1]))
+    
+    # Update score counter
+    scoreCounter = font.render(str(len(snake.body)), 1, (255, 255, 255))
+    background.blit(scoreCounter, (WIDTH/2, TILE_DIMENSIONS[1]/2))
+    
+    # Draw other objects
+    for arg in args:
+        background.blit(arg[0],(arg[1], arg[2]))
+    
+    # Update screen
+    pygame.display.update()
+
+def keyboard_inputs():
+    pass
+    # For future code cleanup purposes
 
 def spawn_apple(snake) -> tuple:
     """
@@ -160,6 +195,7 @@ def spawn_apple(snake) -> tuple:
     Returns:
         tuple: Apple object with co-ordinates and surface.
     """
+    # Checks if apple can be spawned on the board
     good_coordinates_flag = False
     while not good_coordinates_flag:
         x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
@@ -184,6 +220,7 @@ def main():
     pygame.init() # Initializes pygame module
     pygame.display.set_caption("Snake") # Sets window title
     clock = pygame.time.Clock() # FPS object
+    font = pygame.font.Font(None, 36) # Font object
     direction = pygame.K_RIGHT
     loop_ctr = 1
     # Create apple and ensure it does not spawn on the initial snake head
@@ -218,18 +255,17 @@ def main():
                 if paused[1] in ("PAUSE", "START"):
                 # Gray out tiles when paused
                     for _,_,tile in snake.body[1:]:
-                        tile.fill("#777777")
+                        tile.fill(GRAY)
                         
                     if event.type == pygame.KEYDOWN:
                         # Delay for 3 seconds before unpausing
-                        for i in range(PAUSE_DELAY*10**3):
-                            # print(f"Unpausing in {PAUSE_DELAY - i}...", end="\r")
-
-                            font = pygame.font.Font(None, 36)
-                            textPause = font.render(str(PAUSE_DELAY - i), 1, (255, 255, 255))
-                            background.blit(textPause, (WIDTH // 2, HEIGHT // 2))
-                            pygame.display.update()
-                            sleep(1)
+                        for i in range(PAUSE_DELAY):
+                            if i%10**3 == 0:
+                                # Display time remaining until unpausing
+                                textPause = font.render(str(round(floor(PAUSE_DELAY/10**3) - i/10**3)), 1, (255, 255, 255))
+                                update_screen((textPause, WIDTH/2, HEIGHT/2),snake=snake, apple=apple, font=font)
+                                pygame.display.update()
+                            sleep(10**-3)
                         
                         # White back tiles when unpaused
                         for _,_,tile in snake.body[1:]:
@@ -243,8 +279,9 @@ def main():
                         paused = [False,""]
                 
                 elif paused[1] == "EXTRA FRAME":
-                    for _ in range(EXTRA_FRAMES):
-                        sleep(10**-3)
+                    # Wait for given amount of time
+                    sleep(EXTRA_FRAMES*10**-3)
+                    # Unpause
                     paused = [False,"EXTRA FRAME LIFTED"]
                 
                 elif paused[1] == "DEATH":
@@ -256,7 +293,7 @@ def main():
                     pass
                     # TODO:
                     # What do we do on win?
-                        
+        
         
         # Move snake head when loop_ctr has reset
         # !!!!! Bad solution as loops are unreliable measurements of time. Consider instead replacing with a time module timer, or using clock.time()/clock.raw_time()
@@ -267,16 +304,9 @@ def main():
         
         # TODO:
         # Add apple-bag power-up
+
+        update_screen(snake=snake, apple=apple, font=font)
         
-        
-        # Refill background
-        background.fill(DARK_GREEN) # Sets background color
-        
-        # Draw objects
-        for tile in snake.body:
-            background.blit(tile[2],(tile[0], tile[1]))
-        background.blit(apple[2],(apple[0], apple[1]))
-            
         # Game loop
         pygame.display.flip() # Updates screen, completes one loop
         clock.tick(FPS) # Ensures a max of 60 FPS
