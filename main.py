@@ -7,16 +7,12 @@ from PIL import Image,ImageFilter
 
 # TODO:
 # Win code
-# Lose code
+# Lose & Restart code
 # Icons/Sprites
 # Audio
-# Leaderboards
+# Leaderboards & Score Counter
 # Fix timer (maybe good enough solution?)
 # Apple bags
-# Add pause
-# Convert to exe
-# Check viability on mav
-
 
 
 # Game is updated/cycled every LOOP_DELAY loops
@@ -31,13 +27,14 @@ HEIGHT = 500
 WIDTH = 500
 GRID_SIZE = (20,20)
 TILE_DIMENSIONS = (WIDTH/GRID_SIZE[0], HEIGHT/GRID_SIZE[1])     # Calculate dimensions of snake tile based on grid & and window dimensions
-PAUSE_DELAY = 3
-
+PAUSE_DELAY = 3000         # Number of milliseconds to wait before unpausing
+EXTRA_FRAMES = 500       # Number of extra milliseconds to give upon imminent death
 DARK_GREEN = "#006432"
+GRAY = "#888888"
 
-paused = (True, "START")
+paused = [True, "START"]
 background = pygame.display.set_mode((WIDTH, HEIGHT))           # Sets window size
-movement_disabled = False
+move_input_disabled = False
 
 
 
@@ -59,15 +56,22 @@ class Snake:
             makeshift_food = (self.body[0][0], self.body[0][1])
             self.move(pygame.K_UP, makeshift_food)
     
-    def move(self, direction, apple):
+    def move(self, direction, apple) -> bool:
         """
         Moves the snake in a specified direction.
 
         Args:
             direction: Specify the direction in which to move the snake.
             eaten (bool, optional): Specify whether the snake has eaten this iteration. Defaults to False.
+        
+        Returns:
+            bool: Returns whether the snake has eaten this iteration.
         """
-        global paused, background, movement_disabled
+        global paused, background, move_input_disabled
+        
+        if paused[0] and paused[1] == "EXTRA FRAME":
+            paused = [False,""]
+            return False
         
         head = self.body[0]
         newhead = [0,0,None]
@@ -97,40 +101,50 @@ class Snake:
         eaten = False
         if newhead[0] == apple[0] and newhead[1] == apple[1]:
             eaten = True
-            print(f"Snake length increased to: {len(self.body)}")
-        
+            # print(f"Snake length increased to: {len(self.body)}")
+          
+        # Add extra frame if snake is about to collide with itself
+        if paused[1] != "EXTRA FRAME LIFTED":
+            for tile in self.body[2:]:
+                if newhead[0] == tile[0] and newhead[1] == tile[1]:
+                    paused = [True, "EXTRA FRAME"]
+                    print("Extra frame flag set")
+        else:
+            paused[1] = ""
         
         # Checks if snake has hit itself, if so, color it red and end game
-        for tile in self.body[1:]:
-            if newhead[0] == tile[0] and newhead[1] == tile[1]:
-                paused = (True, "DEATH")
+        if not paused[0]:
+            for tile in self.body[2:]:
+                if newhead[0] == tile[0] and newhead[1] == tile[1]:
+                    paused = [True, "DEATH"]
+                    
+                    # Blink snake body
+                    for _ in range(5):
+                        for x,y,tile in self.body:
+                            tile.fill(DARK_GREEN)
+                            background.blit(tile,(x, y))
+                        pygame.display.flip() 
+                        sleep(0.25)
+                        for x,y,tile in self.body:
+                            tile.fill(GRAY)
+                            background.blit(tile,(x, y))
+                        pygame.display.flip() 
+                        sleep(0.25)
+        
+        if not paused[0] or paused[1] == "START":
+            try:    # Throws an error if direction = None
+                newhead.append(pygame.Surface(TILE_DIMENSIONS))           
+                newhead[2].fill("white")
+                if paused[1] != "EXTRA FRAME":
+                    self.body.insert(0, newhead)
                 
-                # Blink snake body
-                for _ in range(5):
-                    for x,y,tile in self.body:
-                        tile.fill(DARK_GREEN)
-                        background.blit(tile,(x, y))
-                    pygame.display.flip() 
-                    sleep(0.25)
-                    for x,y,tile in self.body:
-                        tile.fill("#888888")
-                        background.blit(tile,(x, y))
-                    pygame.display.flip() 
-                    sleep(0.25)
-        
-        
-        try:    # Throws an error if direction = None
-            newhead.append(pygame.Surface(TILE_DIMENSIONS))           
-            newhead[2].fill("white")
-            self.body.insert(0, newhead)
-            
-            if not eaten and not paused[0]:     # Pops tail if snake has not eaten and game is not paused
-                self.body.pop()
-        except: # Expected exception, no need to handle
-            pass
+                if not eaten and not paused[0]:     # Pops tail if snake has not eaten and game is not paused
+                    self.body.pop()
+            except: # Expected exception, no need to handle
+                pass
         
         # Re-enable movement
-        movement_disabled = False
+        move_input_disabled = False
         
         return eaten    # Returns whether snake has eaten this frame or not
 
@@ -153,7 +167,7 @@ def spawn_apple(snake) -> tuple:
         good_coordinates_flag = not [x,y] in snake_coords
     apple = (x, y, pygame.Surface(TILE_DIMENSIONS))
     apple[2].fill("red")
-    print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
+    # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
     
     return apple
 
@@ -164,7 +178,7 @@ def main():
     Main loop: Run upon execution.
     Initializes board, variables and begins pygame window-loop.
     """
-    global paused, background, movement_disabled
+    global paused, background, move_input_disabled
     snake = Snake() # Create snake
     
     pygame.init() # Initializes pygame module
@@ -191,14 +205,14 @@ def main():
                     # Guard-rails so you can't die by moving directly backwards into yourself
                     dont_move_this_way = {pygame.K_LEFT: pygame.K_RIGHT, pygame.K_RIGHT: pygame.K_LEFT, pygame.K_UP: pygame.K_DOWN, pygame.K_DOWN: pygame.K_UP}
                     # Update move direction
-                    if event.key in dont_move_this_way.keys() and dont_move_this_way[event.key] != direction and not movement_disabled:
+                    if event.key in dont_move_this_way.keys() and dont_move_this_way[event.key] != direction and not move_input_disabled:
                         direction = event.key
                         # Disable movement until 1 movement has been done
-                        movement_disabled = True
+                        move_input_disabled = True
                     
                     # Pause when ESC is pressed
                     if event.key == pygame.K_ESCAPE:
-                        paused = (True, "PAUSE")
+                        paused = [True, "PAUSE"]
                         
             else:
                 if paused[1] in ("PAUSE", "START"):
@@ -208,17 +222,13 @@ def main():
                         
                     if event.type == pygame.KEYDOWN:
                         # Delay for 3 seconds before unpausing
-                        for i in range(PAUSE_DELAY):
+                        for i in range(PAUSE_DELAY*10**3):
                             # print(f"Unpausing in {PAUSE_DELAY - i}...", end="\r")
 
                             font = pygame.font.Font(None, 36)
                             textPause = font.render(str(PAUSE_DELAY - i), 1, (255, 255, 255))
                             background.blit(textPause, (WIDTH // 2, HEIGHT // 2))
                             pygame.display.update()
-                            background.fill(DARK_GREEN)
-                            for tile in snake.body[1:]:
-                                background.blit(tile[2], (tile[0], tile[1]))
-                            background.blit(apple[2], (apple[0], apple[1]))
                             sleep(1)
                         
                         # White back tiles when unpaused
@@ -230,8 +240,13 @@ def main():
                             direction = event.key
                             
                         # Unpause
-                        paused = (not paused[0], paused[1])
-                        
+                        paused = [False,""]
+                
+                elif paused[1] == "EXTRA FRAME":
+                    for _ in range(EXTRA_FRAMES):
+                        sleep(10**-3)
+                    paused = [False,"EXTRA FRAME LIFTED"]
+                
                 elif paused[1] == "DEATH":
                     pass
                     # TODO:
