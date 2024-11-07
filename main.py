@@ -236,6 +236,11 @@ def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
     global background
     # Refill background
     background.fill(DARK_GREEN) # Sets background color
+
+    # Draw grid
+    for row in TILE_DIMENSIONS[1]:
+        for tile in TILE_DIMENSIONS[0]:
+            pass # WIP
     
     # Draw snake
     for tile in snake.body:
