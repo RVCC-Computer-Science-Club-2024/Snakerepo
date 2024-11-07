@@ -238,9 +238,10 @@ def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
     background.fill(DARK_GREEN) # Sets background color
 
     # Draw grid
+    bgTile = pygame.image.load(get_path("assets/tile.png")).convert_alpha()
     for row in range(TILE_DIMENSIONS[1]):
         for tile in range(TILE_DIMENSIONS[0]):
-            pass # WIP
+            background.blit(bgTile, (tile * TILE_DIMENSIONS[0], row * TILE_DIMENSIONS[1]))
     
     # Draw snake
     for tile in snake.body:
