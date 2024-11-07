@@ -7,12 +7,12 @@ from pygame.locals import QUIT
 
 # TODO:
 # Win code
-# Background grid pattern
 # Better score counter
 # Audio
 # Code cleanup
 # Apple bags
 # Fix timer (maybe good enough solution?)
+# Make background grid pattern less jank
 
 # BUG:
 # Upon death & during extra frame, snake looks goofy asf -> maybe need more head sprites? Maybe look into rotating/flipping images?
