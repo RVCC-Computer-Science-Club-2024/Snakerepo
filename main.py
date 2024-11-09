@@ -17,17 +17,17 @@ from pygame.locals import QUIT
 # Apple bags
 # Fix timer (maybe good enough solution?)
 
+
 # BUG
 # ===========================================================================
+# >>>> PRIORITY: HIGH <<<<
+# Apple spawns after win
+# Corner tile asset bug
+
 # >>>> PRIORITY: LOW <<<<
 # Upon death & during extra frame, snake looks goofy asf -> maybe need more head sprites? Maybe look into rotating/flipping images?
 # If start length is 8 or higher, chance that the snake spawns soft-locked
 
-# Rendered FPS
-# Hit back insta death
-# Apple spawn after win
-# corner tile asset bug
-# Resizable
 
 # CONSTANTS
 # ===========================================================================
@@ -39,13 +39,14 @@ LOOP_DELAY = 5              # We want the game rendered with FPS,
                             
 HEIGHT = 500                # Window height
 WIDTH = 500                 # Window width
-GRID_SIZE = (20,20)         # Number of tiles in the grid
+GRID_SIZE = (15,15)         # Number of tiles in the grid
 TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])   # Calculate dimensions of snake tile based on grid & and window dimensions
-PAUSE_DELAY = 3000          # Number of milliseconds to wait before unpausing
+PAUSE_DELAY = 1000          # Number of milliseconds to wait before unpausing
+NO_OF_COUNTDOWN_MSGS = 3    # Number of messages to display while counting down the unpause timer
 EXTRA_FRAMES = 500          # Number of extra milliseconds to give upon imminent death
 INITIAL_SNAKE_LENGTH = 3    # Number of tiles the snake starts with --- Minimum is 3
 DIRECTION_BUFFER_LENGTH = 3 # Max number of keystrokes to queue up at once
-WIN_SCORE_THRESHOLD = 10    # Score threshold to win
+WIN_SCORE_THRESHOLD = 25    # Score threshold to win
 
 DARK_GREEN = "#006432"      # Background color
 
@@ -90,19 +91,24 @@ class Snake:
         # Guardrails to prevent you from dying by moving directly backwards into yourself
         self.dont_move_this_way = {pygame.K_LEFT: pygame.K_RIGHT, pygame.K_RIGHT: pygame.K_LEFT, pygame.K_UP: pygame.K_DOWN, pygame.K_DOWN: pygame.K_UP}
         # Initialize direction buffer
-        # Stores a queue of the last 3 entered direction changes
-        self.direction_buffer = [list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]]
+        # Stores a queue of the last few entered direction changes
+        self.direction_buffer_queue = [list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]]
         
         # Add extra initial body tiles to the snake
-        for _ in range(max(3, INITIAL_SNAKE_LENGTH-1)):
+        for _ in range(max(3, INITIAL_SNAKE_LENGTH)-1):
             # Generate valid, random direction to move snake in initially
             direction = None
-            while not direction or direction == self.dont_move_this_way[self.direction_buffer[-1]]: 
+            while not direction or direction == self.dont_move_this_way[self.direction_buffer_queue[-1]]: 
                 direction = list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]
             
-            self.direction_buffer.append(direction)             # Add direction to buffer
-            self.move(static_growth=True)                                         # Move snake and repeat
-
+            self.direction_buffer_queue.append(direction)       # Add direction to buffer
+# -----> DEBUG PRINT
+            # print(f"Direction chosen for snake creation: {pygame.key.name(direction)} \t|\t Direction buffer after addition: {list(pygame.key.name(direction) for direction in self.direction_buffer_queue)}")
+            self.move(static_growth=True)                       # Move snake and repeat
+        # Move snake one last time to reflect direction stored in the buffer after creation
+        self.move()
+# -----> DEBUG PRINT
+        # print(f"Direction buffer after creation: {list(pygame.key.name(direction) for direction in self.direction_buffer_queue)}")
         
 
     def move(self, static_growth: bool = False):
@@ -123,22 +129,22 @@ class Snake:
         
         # Calculate coordinates of new head
         # ===========================================================================
-        if self.direction_buffer[0] == pygame.K_LEFT:           # If moving left...
+        if self.direction_buffer_queue[0] == pygame.K_LEFT:     # If moving left...
             if head[0] == 0:
                 newhead = [WIDTH-TILE_DIMENSIONS[0], head[1]]   # Screen wrap movement
             else:
                 newhead = [head[0]-TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
-        elif self.direction_buffer[0] == pygame.K_RIGHT:        # If moving right...
+        elif self.direction_buffer_queue[0] == pygame.K_RIGHT:  # If moving right...
             if head[0] == WIDTH-TILE_DIMENSIONS[0]:
                 newhead = [0, head[1]]                          # Screen wrap movement
             else:
                 newhead = [head[0]+TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
-        elif self.direction_buffer[0] == pygame.K_UP:           # If moving up...
+        elif self.direction_buffer_queue[0] == pygame.K_UP:     # If moving up...
             if head[1] == 0:
                 newhead = [head[0], HEIGHT-TILE_DIMENSIONS[1]]  # Screen wrap movement
             else:
                 newhead = [head[0], head[1]-TILE_DIMENSIONS[1]] # otherwise move nromally
-        elif self.direction_buffer[0] == pygame.K_DOWN:         # If moving down...
+        elif self.direction_buffer_queue[0] == pygame.K_DOWN:   # If moving down...
             if head[1] == HEIGHT-TILE_DIMENSIONS[1]:
                 newhead = [head[0], 0]                          # Screen wrap movement
             else:
@@ -190,10 +196,14 @@ class Snake:
             self.body.insert(0, newhead)                    # Add new head to body
             
             # Check if snake has eaten apple
-            # ...if so, spawn new apple
-            # ...if not, remove last body tile
+            # ...if so, spawn new apple...
             if newhead[0] == self.apple[0] and newhead[1] == self.apple[1]:
-                self.spawn_apple()
+                #  ...unless game is about to be won, in which case, turn current apple invisible for clean finish
+                if len(self.body)-INITIAL_SNAKE_LENGTH != WIN_SCORE_THRESHOLD:
+                    self.spawn_apple()
+                else:
+                    self.apple[2].set_alpha(0)
+            # ...if not, remove last body tile
             elif not static_growth:
                 self.body.pop()
         
@@ -204,14 +214,14 @@ class Snake:
         
         # Reduce buffer
         # ===========================================================================
-        if len(self.direction_buffer) > 1:
-            self.direction_buffer.pop(0)
+        if len(self.direction_buffer_queue) > 1:
+            self.direction_buffer_queue.pop(0)
     
     def apply_assets(self) -> None:
         """
         Apply assets to all snake tiles
         """ 
-        current_direction = self.direction_buffer[0]
+        current_direction = self.direction_buffer_queue[0]
         # Add asset for Head
         # ========================================================================
         head = self.body[0]
@@ -320,11 +330,11 @@ class Snake:
                 # aka up to down wrap
                 if headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]:
                     # current tile is to the left of tailward tile
-                    # aka up-down wrap to right
+                    # aka right to up-down wrap
                     if current_tile[0] < tailward_tile[0]:
                         current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
                     # current tile is to the right of tailward tile
-                    # aka up-down wrap to left
+                    # aka left to up-down wrap
                     elif current_tile[0] > tailward_tile[0]:
                         current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
                 # tailward tile on topmost side of screen
@@ -434,7 +444,7 @@ def update_screen(*args: tuple, snake: Snake) -> None:
     
     # Update score counter
     score_font = pygame.font.SysFont("Aptos", 36) # Font object for score
-    score_text = score_font.render(f"{len(snake.body)-1-INITIAL_SNAKE_LENGTH} / {WIN_SCORE_THRESHOLD}", 1, (255, 255, 255))
+    score_text = score_font.render(f"{len(snake.body)-INITIAL_SNAKE_LENGTH} / {WIN_SCORE_THRESHOLD}", 1, (255, 255, 255))
     score_apple_image = pygame.image.load(get_path("assets/apple.png")).convert_alpha()
     score_surface = pygame.Surface((score_apple_image.get_width()+score_text.get_width()+TILE_DIMENSIONS[0]/4, max(score_apple_image.get_height(), score_text.get_height())))
     score_surface.fill(DARK_GREEN)
@@ -481,7 +491,7 @@ def resize_window(new_window_dimensions: tuple, snake: Snake) -> None:
     snake.apple[0], snake.apple[1] = ceil(snake.apple[0]/old_tile_dimensions[0])*TILE_DIMENSIONS[0], ceil(snake.apple[1]/old_tile_dimensions[1])*TILE_DIMENSIONS[1]
     snake.apple[2] = pygame.transform.scale(snake.apple[2], TILE_DIMENSIONS)
     
-# -----> DEBUG PRINT
+# -----> DEBUG PRINTS
     # print(f"Window resized to {WIDTH}x{HEIGHT}\t|\t Tile dimensions: {TILE_DIMENSIONS}")
     # print(f"Snake head at {snake.body[0][0]},{snake.body[0][1]} \t|\t Right-most coordinates: {WIDTH-TILE_DIMENSIONS[0]}")
     
@@ -501,6 +511,7 @@ def main() -> None:
     pygame.display.set_caption("Snake") # Sets window title
     pygame.display.set_icon(pygame.image.load(get_path("assets/head_up.png"))) # Sets window icon (in the top-left corner of the window)
     clock = pygame.time.Clock() # Create FPS object
+    resize_window((WIDTH, HEIGHT), snake)   # Make initial minute adjustments to user-defined program CONSTANT so that the grid and window lines up
     
     loop_ctr = 1                # Loop counter variable
     win_restart_key_ctr = 0     # Key press counter to restart on win
@@ -534,13 +545,13 @@ def main() -> None:
                 if event.type == pygame.KEYDOWN:    # If a key is pressed
                     # If pressed key is a valid direction, add to movement buffer
                     # ... w/ guard-rails so you can't die by moving directly backwards into yourself
-                    if event.key in snake.dont_move_this_way.keys() and snake.dont_move_this_way[event.key] != snake.direction_buffer[-1]:
+                    if event.key in snake.dont_move_this_way.keys() and event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-1]]:
                         # Add key to buffer if buffer is not full
-                        if len(snake.direction_buffer) < DIRECTION_BUFFER_LENGTH:
-                            snake.direction_buffer.append(event.key)
+                        if len(snake.direction_buffer_queue) < DIRECTION_BUFFER_LENGTH:
+                            snake.direction_buffer_queue.append(event.key)
                         # If buffer is full, overwrite most recent key
-                        elif event.key != snake.dont_move_this_way[snake.direction_buffer[-2]]:
-                            snake.direction_buffer[-1] = event.key
+                        elif event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-2]]:
+                            snake.direction_buffer_queue[-1] = event.key
                     
                     # Pause when ESC is pressed
                     if event.key == pygame.K_ESCAPE:
@@ -555,11 +566,11 @@ def main() -> None:
                 for event in event_list:            # Unpause after delay when any key is pressed
                     if event.type == pygame.KEYDOWN:
                         for i in range(PAUSE_DELAY):    # Aforementioned delay
-                            if i%10**3 == 0:
-                                # Display time remaining until unpausing
-                                pause_font = pygame.font.SysFont("Aptos", 36) # Font object for pause message
-                                text_pause = pause_font.render(f"{round(floor(PAUSE_DELAY/10**3) - i/10**3)}", 1, (255, 255, 255))
-                                update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake)
+                            if i%floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS) == 0:
+                                # Display countdown
+                                pause_font = pygame.font.SysFont("Aptos", 64) # Font object for pause message
+                                text_pause = pause_font.render(f"{(PAUSE_DELAY-i)//floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS)}", 1, (255, 255, 255))
+                                update_screen((text_pause, WIDTH/2 - text_pause.get_height()/2, HEIGHT/2 - text_pause.get_width()/2),snake=snake)
                             pygame.time.wait(1)
                         
                         
@@ -567,8 +578,8 @@ def main() -> None:
                             tile.set_alpha(255)
                             
                         # Update move direction when unpausing <----- POTENTIAL LIFEHACK 👀
-                        if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
-                            snake.direction_buffer[0] = event.key
+                        if event.key in snake.dont_move_this_way.keys() and event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-1]]:
+                            snake.direction_buffer_queue[0] = event.key
                             
                         # Finally, unpause
                         paused = [False,""]
@@ -590,7 +601,7 @@ def main() -> None:
             elif paused[1] == "WIN":
                 win_font = pygame.font.SysFont("Aptos", 36) # Font object for pause message
                 text_win_1 = win_font.render(f"You Win! =D", 1, (255, 255, 255))
-                text_win_2 = win_font.render(f"Press ESC 3x to restart!", 1, (255, 255, 255))
+                text_win_2 = win_font.render(f"Press ESC 3 times to restart!", 1, (255, 255, 255))
                 update_screen((text_win_1, WIDTH/2-text_win_1.get_width()/2, HEIGHT/2 ), (text_win_2, WIDTH/2-text_win_2.get_width()/2, HEIGHT/2+text_win_1.get_height()),snake=snake)
                 
                 for event in event_list:
@@ -614,11 +625,13 @@ def main() -> None:
         
         # Win condition check
         # ===========================================================================
-        if len(snake.body) - 1 - INITIAL_SNAKE_LENGTH == WIN_SCORE_THRESHOLD:
+        if len(snake.body) - INITIAL_SNAKE_LENGTH == WIN_SCORE_THRESHOLD:
             paused = [True, "WIN"]
         
-# -----> DEBUG PRINT
-        # print(f"Main method ticked. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in snake.direction_buffer)} \t|\t Paused state: {paused} \t|\t Loop counter: {loop_ctr}")
+# -----> DEBUG PRINTS
+        # if not paused[0]:
+            # print(f"Main method ticked. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in snake.direction_buffer_queue)} \t|\t Paused state: {paused} \t|\t Loop counter: {loop_ctr}")
+            # print(f"Snake head at {snake.body[0][0]},{snake.body[0][1]} \t|\t Right-most coordinates: {WIDTH-TILE_DIMENSIONS[0]}")
         
         # TODO
         # Add apple-bag power-up
