@@ -1,121 +1,141 @@
 from rich.traceback import install; install()
 from rich import print
 import pygame, sys, os, random
-from time import sleep
 from math import floor
 from pygame.locals import QUIT
 
-# TODO:
+# TODO
+# ===========================================================================
+# >>>> PRIORITY: HIGH <<<<
 # Win code
 # Better score counter
 # Audio
+# Make background grid pattern less jank
+
+# >>>> PRIORITY: MEDIUM <<<<
 # Code cleanup
 # Apple bags
 # Fix timer (maybe good enough solution?)
-# Make background grid pattern less jank
 
-# BUG:
+# BUG
+# ===========================================================================
+# >>>> PRIORITY: LOW <<<<
 # Upon death & during extra frame, snake looks goofy asf -> maybe need more head sprites? Maybe look into rotating/flipping images?
-# Insta-restart bug
-# Extra frame can last forever
-# Does not go translucent on death
+# If start length is 8 or higher, chance that the snake spawns soft-locked
 
 
+# CONSTANTS
+# ===========================================================================
 
-
-# Game is updated/cycled every LOOP_DELAY loops
-# In other words, ~Loop execution time/LOOP_DELAY seconds per loop
-#       >>>>      WTF IS LOOP EXECUTION TIME???  There has to be a better way to measure loop time than this    <<<<<
-#       >>>>      Refer to "Move snake head when loop_ctr has reset" comment in main loop ~line 240             <<<<<
-
-LOOP_DELAY = 10             # We don't want the game running this fast, or the snake ZOOMS, so we delay the game loop by this many loops
-
-FPS = 60                    # Ensures that at LEAST this many frames render per loop
-HEIGHT = 500
-WIDTH = 500
-GRID_SIZE = (20,20)
-TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])     # Calculate dimensions of snake tile based on grid & and window dimensions
+FPS = 60                    # Maximum FPS, to avoid CPU overload
+LOOP_DELAY = 10             # We want the game rendered with FPS, 
+                            # but don't want the code logic to be executed every frame.
+                            # The game logic is executed every LOOP_DELAY iterations of the main() loop
+                            
+HEIGHT = 500                # Window height
+WIDTH = 500                 # Window width
+GRID_SIZE = (10,10)         # Number of tiles in the grid
+TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])   # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 3000          # Number of milliseconds to wait before unpausing
 EXTRA_FRAMES = 500          # Number of extra milliseconds to give upon imminent death
-DARK_GREEN = "#006432"      # Background color
 START_LENGTH = 3
+DIRECTION_BUFFER_LENGTH = 3
 
-paused = [True, "START"]
-background = pygame.display.set_mode((WIDTH, HEIGHT))           # Sets window size
-input_disable_guardrail = False
+DARK_GREEN = "#006432"      # Background color
+
+# GLOBAL VARRIABLES
+# ===========================================================================
+paused = [True, "START"]                                        # List that stores pause state and reason
+background = pygame.display.set_mode((WIDTH, HEIGHT))           # Creates a pygame window object with given dimensions
 
 
 
-def get_path(file_path):
+def get_path(file_path: str) -> str:
+    """
+    Returns the absolute path of a desired file
+
+    Args:
+        file_path (str): Relative path to the desired file
+
+    Returns:
+        str: Absolute path to the desired file
+    """
     return os.path.join(os.path.dirname(__file__), file_path)
 
 
 class Snake:
     """
-    Snake class that contains the snake body to be displayed in the game, 
+    Snake class that contains the snake body to be displayed in the game, \n
     along with associated methods to manipulate it.
     """
     def __init__(self) -> None:
         """
-        Constructor to initialize the snake.
-        Initializes a body with 1 head tile at a random location.
+        Constructor to initialize the snake. \n
+        Initializes a body with a random shape at a random location on the grid. \n
+        Spawns initial apple via spawn_apple() method
         """
+        # Initialize body
         self.body = [[random.randint(0,GRID_SIZE[0]-1)*TILE_DIMENSIONS[0],random.randint(0,GRID_SIZE[1]-1)*TILE_DIMENSIONS[1],pygame.image.load(get_path("assets/head_up.png")).convert_alpha()]]
         
-        # Add more body tiles to begin with
+        # List of invalid directions
+        # Guardrails to prevent you from dying by moving directly backwards into yourself
+        self.dont_move_this_way = {pygame.K_LEFT: pygame.K_RIGHT, pygame.K_RIGHT: pygame.K_LEFT, pygame.K_UP: pygame.K_DOWN, pygame.K_DOWN: pygame.K_UP}
+        # Initialize direction buffer
+        # Stores a queue of the last 3 entered direction changes
+        self.direction_buffer = [list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]]
+        
+        # Add extra initial body tiles to the snake
         for _ in range(START_LENGTH-1):
-            self.move(pygame.K_UP, spawn_apple(self, self.body[0][0], self.body[0][1]))
-    
-    def move(self, direction, apple: list) -> bool:
-        """
-        Moves the snake in a specified direction.
+            direction = None
+            while not direction or direction == self.dont_move_this_way[self.direction_buffer[-1]]: 
+                direction = list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]
+            self.direction_buffer.append(direction)
+            self.spawn_apple(self.body[0][0], self.body[0][1])
+            self.move()
+        
+        # Spawn initial apple
+        self.spawn_apple()
+        
 
-        Args:
-            direction (pygame Key Code): Specify the direction in which to move the snake.
-            apple (list): Apple object.
-        
-        Returns:
-            bool: Returns whether the snake has eaten this iteration.
+    def move(self):
         """
-        global paused, background, input_disable_guardrail
+        Moves the snake in a specified direction. \n
+        Takes care of associated logic, such as collision detection, snake growth, etc.
+        """
+        global paused, background   # Load global variables
         
-        if paused[0] and paused[1] == "EXTRA FRAME":
-            paused = [False,""]
-            return False
         
         head = self.body[0]
-        newhead = [0,0,None]
+        newhead = [0,0,None]    # Initialize new head
         
-        if direction == pygame.K_LEFT:
-            if head[0] == 0:                                    # Screen wrap check
-                newhead = [WIDTH-TILE_DIMENSIONS[0], head[1]]
+        # Calculate coordinates of new head
+        # ===========================================================================
+        if self.direction_buffer[0] == pygame.K_LEFT:           # If moving left...
+            if head[0] == 0:
+                newhead = [WIDTH-TILE_DIMENSIONS[0], head[1]]   # Screen wrap movement
             else:
-                newhead = [head[0]-TILE_DIMENSIONS[0], head[1]]
-        elif direction == pygame.K_RIGHT:
-            if head[0] == WIDTH-TILE_DIMENSIONS[0]:             # Screen wrap check
-                newhead = [0, head[1]]
+                newhead = [head[0]-TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
+        elif self.direction_buffer[0] == pygame.K_RIGHT:        # If moving right...
+            if head[0] == WIDTH-TILE_DIMENSIONS[0]:
+                newhead = [0, head[1]]                          # Screen wrap movement
             else:
-                newhead = [head[0]+TILE_DIMENSIONS[0], head[1]]
-        elif direction == pygame.K_UP:
-            if head[1] == 0:                                    # Screen wrap check
-                newhead = [head[0], HEIGHT-TILE_DIMENSIONS[1]]
+                newhead = [head[0]+TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
+        elif self.direction_buffer[0] == pygame.K_UP:           # If moving up...
+            if head[1] == 0:
+                newhead = [head[0], HEIGHT-TILE_DIMENSIONS[1]]  # Screen wrap movement
             else:
-                newhead = [head[0], head[1]-TILE_DIMENSIONS[1]]
-        elif direction == pygame.K_DOWN:
-            if head[1] == HEIGHT-TILE_DIMENSIONS[1]:            # Screen wrap check
-                newhead = [head[0], 0]
+                newhead = [head[0], head[1]-TILE_DIMENSIONS[1]] # otherwise move nromally
+        elif self.direction_buffer[0] == pygame.K_DOWN:         # If moving down...
+            if head[1] == HEIGHT-TILE_DIMENSIONS[1]:
+                newhead = [head[0], 0]                          # Screen wrap movement
             else:
-                newhead = [head[0], head[1]+TILE_DIMENSIONS[1]]
-        
-        
-        # Checks if snake has eaten apple, if so, grow snake
-        eaten = False
-        if newhead[0] == apple[0] and newhead[1] == apple[1]:
-            eaten = True
-            # print(f"Snake length increased to: {len(self.body)}")
+                newhead = [head[0], head[1]+TILE_DIMENSIONS[1]] # otherwise move nromally
         
         
         # Add extra frame if snake is about to collide with itself
+        # ===========================================================================
+        # There needs to be a check to prevent infinite extra frames, since this method is called 
+        # once the extra frame wears off, in order to ascertain movement or death
         if paused[1] != "EXTRA FRAME LIFTED":   # Prevent infinite extra frames
             for tile in self.body[2:]:
                 if newhead[0] == tile[0] and newhead[1] == tile[1]:
@@ -124,108 +144,260 @@ class Snake:
             paused[1] = ""
         
         
-        # Checks if snake has hit itself, if so, color it grey and end game
-        if not paused[0]:
-            for tile in self.body[1:]:
+        # Death check - Check if snake has collided with itself
+        # ===========================================================================
+        if not paused[0]:               # Skip death check if extra frame was just activated
+            for tile in self.body[1:]:  # ...otherwise check for death
                 if newhead[0] == tile[0] and newhead[1] == tile[1]:
-                    paused = [True, "DEATH"]
-                    
-                    # Blink snake body for 5 cycles upon death
-                    for _ in range(5):
+                    # Snake death animation:
+                    for _ in range(5):          # Blink snake body for 5 cycles upon death
                         for _,_,tile in self.body:
                             tile.set_alpha(0)
-                            update_screen(snake=self, apple=apple)
-                        sleep(0.25)
+                            update_screen(snake=self, apple=self.apple)
+                        pygame.time.delay(250)
                         for _,_,tile in self.body:
                             tile.set_alpha(255)
-                            update_screen(snake=self, apple=apple)
-                        sleep(0.25)
+                            update_screen(snake=self, apple=self.apple)
+                        pygame.time.delay(250)
+                        
+                    # Then make snake body translucent
+                    for _,_,tile in self.body:
+                        tile.set_alpha(128)
+                        update_screen(snake=self, apple=self.apple)
+                    
+                pygame.event.clear()        # Prevents instant restarts from queueing key press events during death animation
+                paused = [True, "DEATH"]    # Pause the game due to death of snake
+                
         
-        
-        if not paused[0] or paused[1] == "START":
-            newhead.append(pygame.Surface(TILE_DIMENSIONS))
-            # By default, snake body has purple-black checkered missing texture
-            if len(self.body)%2 == 0:
-                newhead[2].fill("purple")
-            else:
-                newhead[2].fill("black")
-            if paused[1] != "EXTRA FRAME":
-                self.body.insert(0, newhead)
+        # Head addition & snake growth
+        # ===========================================================================
+        if not paused[0] or paused[1] == "START":   # Skip if extra frame was just actvated
+                                                    # Do not skip if game is paused due to it having just started 
+                                                    # (logic used when initially creating the snake)
+            newhead.append(pygame.Surface(TILE_DIMENSIONS)) # Add surface to new head
+            self.body.insert(0, newhead)                    # Add new head to body
             
-            if not eaten and not paused[0]:     # Pops tail if snake has not eaten and game is not paused
+            # Check if snake has eaten apple
+            # ...if so, spawn new apple
+            # ...if not, remove last body tile
+            if newhead[0] == self.apple[0] and newhead[1] == self.apple[1]:
+                self.spawn_apple()
+            else:
                 self.body.pop()
         
-        # Re-enable movement
-        input_disable_guardrail = False
-        
         # Apply assets to snake body
-        self.apply_assets(direction)
+        # ===========================================================================
+        self.apply_assets()
         
-        return eaten    # Returns whether snake has eaten this frame or not
+        # Reduce buffer
+        # ===========================================================================
+        if len(self.direction_buffer) > 1:
+            self.direction_buffer.pop(0)
     
-    def apply_assets(self, direction) -> None:
-        """_summary_
+    def apply_assets(self) -> None:
+        """
+        Apply assets to all snake tiles
+        """ 
+        current_direction = self.direction_buffer[0]
+        # Add asset for Head
+        # ========================================================================
+        head = self.body[0]
+        if current_direction == pygame.K_LEFT:
+            head[2] = pygame.image.load(get_path("assets/head_left.png")).convert_alpha()
+        elif current_direction == pygame.K_RIGHT:
+            head[2] = pygame.image.load(get_path("assets/head_right.png")).convert_alpha()
+        elif current_direction == pygame.K_UP:
+            head[2] = pygame.image.load(get_path("assets/head_up.png")).convert_alpha()
+        elif current_direction == pygame.K_DOWN:
+            head[2] = pygame.image.load(get_path("assets/head_down.png")).convert_alpha()
+        head[2] = pygame.transform.scale(head[2], TILE_DIMENSIONS)
+        
+        
+        headward_tile, current_tile = head, self.body[1]
+        # Add assets for Body
+        # ========================================================================
+        # For headward tile --- current tile --- tailward tile, alter the texture on locations of headward tile and current tile
+        for tailward_tile in self.body[2:]:
+            
+            # Straight-line body checks
+            # ==========================
+            if current_tile[0] == headward_tile[0] and current_tile[0] == tailward_tile[0]:   # Horizontal body
+                current_tile[2] = pygame.image.load(get_path("assets/body_vertical.png"))
+            elif current_tile[1] == headward_tile[1] and current_tile[1] == tailward_tile[1]:   # Vertical body
+                current_tile[2] = pygame.image.load(get_path("assets/body_horizontal.png"))
+            
+            # Standard turn checks
+            # ====================
+            elif headward_tile[0] < current_tile[0]:         # headward tile is to the left of current tile
+                if current_tile[1] < tailward_tile[1]:     # current tile is above tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+                elif current_tile[1] > tailward_tile[1]:    # current tile is below tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+            elif headward_tile[0] > current_tile[0]:        # headward tile is to the right of current tile
+                if current_tile[1] < tailward_tile[1]:      # current tile is above tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                elif current_tile[1] > tailward_tile[1]:    # current tile is below tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+            elif headward_tile[1] < current_tile[1]:        # headward tile is above current tile
+                if current_tile[0] < tailward_tile[0]:      # current tile is to the left of tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+                elif current_tile[0] > tailward_tile[0]:    # current tile is to the right of tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+            elif headward_tile[1] > current_tile[1]:        # headward tile is below current tile
+                if current_tile[0] < tailward_tile[0]:      # current tile is to the left of tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                elif current_tile[0] > tailward_tile[0]:    # current tile is to the right of tailward tile
+                    current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+            
+            # Screen wrap turn checks
+            # =======================
+            # current tile on leftmost side of screen
+            if current_tile[0] == 0:
+                # headward tile on rightmost side of screen
+                # aka left to right wrap
+                if headward_tile[0] == WIDTH-TILE_DIMENSIONS[0]:
+                    # current tile is above tailward tile
+                    # aka up to left-right wrap
+                    if current_tile[1] < tailward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+                    # current tile is below tailward tile
+                    # aka down to left-right wrap
+                    elif current_tile[1] > tailward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+                # headward tile on leftmost side of screen
+                # aka right to left wrap
+                elif tailward_tile[0] == WIDTH-TILE_DIMENSIONS[0]:
+                    # current tile is above headward tile
+                    # aka right-left wrap to down
+                    if current_tile[1] < headward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+                    # current tile is below headward tile
+                    # aka right-left wrap to up
+                    elif current_tile[1] > headward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+            
+            # current tile on rightmost side of screen
+            elif current_tile[0] == WIDTH-TILE_DIMENSIONS[0]:
+                # headward tile on leftmost side of screen
+                # aka right to left wrap
+                if headward_tile[0] == 0:
+                    # current tile is above tailward tile
+                    # aka up to right-left wrap
+                    if current_tile[1] < tailward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                    # current tile is below tailward tile
+                    # aka down to right-left wrap
+                    elif current_tile[1] > tailward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+                # tailward tile on rightmost side of screen
+                # aka left to right wrap
+                elif tailward_tile[0] == 0:
+                    # current tile is above headward tile
+                    # aka left-right wrap to down
+                    if current_tile[1] < headward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                    # current tile is below headward tile
+                    # aka left-right wrap to up
+                    elif current_tile[1] > headward_tile[1]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+            
+            # current tile on topmost side of screen
+            elif current_tile[1] == 0:
+                # headward tile on bottommost side of screen
+                # aka up to down wrap
+                if headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]:
+                    # current tile is to the left of tailward tile
+                    # aka up-down wrap to right
+                    if current_tile[0] < tailward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+                    # current tile is to the right of tailward tile
+                    # aka up-down wrap to left
+                    elif current_tile[0] > tailward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+                # tailward tile on topmost side of screen
+                # aka down to up wrap
+                elif tailward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]:
+                    # current tile is to the left of headward tile
+                    # aka down-up wrap to right
+                    if current_tile[0] < headward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+                    # current tile is to the right of headward tile
+                    # aka down-up wrap to left
+                    elif current_tile[0] > headward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+            
+            # current tile on bottommost side of screen
+            elif current_tile[1] == HEIGHT-TILE_DIMENSIONS[1]:
+                # headward tile on topmost side of screen
+                # aka down to up wrap
+                if headward_tile[1] == 0:
+                    # current tile is to the left of tailward tile
+                    # aka down-up wrap to right
+                    if current_tile[0] < tailward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                    # current tile is to the right of tailward tile
+                    # aka down-up wrap to left
+                    elif current_tile[0] > tailward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+                # tailward tile on bottommost side of screen
+                # aka up to down wrap
+                elif tailward_tile[1] == 0:
+                    # current tile is to the left of headward tile
+                    # aka up-down wrap to right
+                    if current_tile[0] < headward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
+                    # current tile is to the right of headward tile
+                    # aka up-down wrap to left
+                    elif current_tile[0] > headward_tile[0]:
+                        current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+            current_tile[2] = pygame.transform.scale(current_tile[2], TILE_DIMENSIONS)
+            headward_tile, current_tile = current_tile, tailward_tile
+        
+        # Add assets for Tail
+        # =====================================================================
+        # Check direction of tail w.r.t. second last tile and check for screen wrap
+        # Important to ensure that screen is wrapping in the correct direction to prevent priority-based mapping issues
+        tail, second_last_tile = self.body[-1], self.body[-2]
+        left_to_right_wrap_flag = tail[0] == 0 and second_last_tile[0] == WIDTH-TILE_DIMENSIONS[0]
+        right_to_left_wrap_flag = tail[0] == WIDTH-TILE_DIMENSIONS[0] and second_last_tile[0] == 0
+        top_to_bottom_wrap_flag = tail[1] == 0 and second_last_tile[1] == HEIGHT-TILE_DIMENSIONS[1]
+        bottom_to_top_wrap_flag = tail[1] == HEIGHT-TILE_DIMENSIONS[1] and second_last_tile[1] == 0
+        if (tail[0] < second_last_tile[0] and not left_to_right_wrap_flag) or right_to_left_wrap_flag:     # Tail is to the left of the body
+            tail[2] = pygame.image.load(get_path("assets/tail_left.png")).convert_alpha()
+        elif (tail[0] > second_last_tile[0] and not right_to_left_wrap_flag) or left_to_right_wrap_flag:     # Tail is to the right of the body
+            tail[2] = pygame.image.load(get_path("assets/tail_right.png")).convert_alpha()
+        elif (tail[1] < second_last_tile[1] and not top_to_bottom_wrap_flag) or bottom_to_top_wrap_flag:     # Tail is above the body
+            tail[2] = pygame.image.load(get_path("assets/tail_up.png")).convert_alpha()
+        elif (tail[1] > second_last_tile[1] and not bottom_to_top_wrap_flag) or top_to_bottom_wrap_flag:     # Tail is below the body
+            tail[2] = pygame.image.load(get_path("assets/tail_down.png")).convert_alpha()
+        tail[2] = pygame.transform.scale(tail[2], TILE_DIMENSIONS)
+    
+    
+    def spawn_apple(self, x: float = 0, y: float = 0):
+        """
+        Spawns an apple on a random position on the board. \n
+        Stored as a list field of the snake object in the form of [x, y, Surface]
 
         Args:
-            direction (_type_): _description_
-        """ # Add asset for head
-        if direction == pygame.K_LEFT:
-            self.body[0][2] = pygame.image.load(get_path("assets/head_left.png")).convert_alpha()
-        elif direction == pygame.K_RIGHT:
-            self.body[0][2] = pygame.image.load(get_path("assets/head_right.png")).convert_alpha()
-        elif direction == pygame.K_UP:
-            self.body[0][2] = pygame.image.load(get_path("assets/head_up.png")).convert_alpha()
-        elif direction == pygame.K_DOWN:
-            self.body[0][2] = pygame.image.load(get_path("assets/head_down.png")).convert_alpha()
-        self.body[0][2] = pygame.transform.scale(self.body[0][2], TILE_DIMENSIONS)
+            x (float, optional): X position of the apple. Defaults to 0.
+            y (float, optional): Y position of the apple. Defaults to 0.
+        """
+        # Find valid coordinates to spawn apple
+        good_coordinates_flag = False
+        while not good_coordinates_flag:
+            x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
+            snake_coords = [tile[:2] for tile in self.body]
+            good_coordinates_flag = not [x,y] in snake_coords
         
-        
-        piece_1, piece_2 = self.body[0], self.body[1]
-        # Add assets for body
-        for piece_3 in self.body[2:]:
-            # For piece_1 - piece_2 - piece_3, alter the texture on locations of piece_1 and piece_2
-            if piece_2[0] == piece_1[0] and piece_2[0] == piece_3[0]:   # Horizontal body
-                piece_2[2] = pygame.image.load(get_path("assets/body_vertical.png"))
-            elif piece_2[1] == piece_1[1] and piece_2[1] == piece_3[1]:   # Vertical body
-                piece_2[2] = pygame.image.load(get_path("assets/body_horizontal.png"))
-            
-            elif piece_1[0] < piece_2[0]:         # Piece_1 is to the left of piece_2
-                if piece_2[1] < piece_3[1]:     # Piece_2 is above piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
-                elif piece_2[1] > piece_3[1]:    # Piece_2 is below piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
-            elif piece_1[0] > piece_2[0]:        # Piece_1 is to the right of piece_2
-                if piece_2[1] < piece_3[1]:      # Piece_2 is above piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
-                elif piece_2[1] > piece_3[1]:    # Piece_2 is below piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
-            elif piece_1[1] < piece_2[1]:        # Piece_1 is above piece_2
-                if piece_2[0] < piece_3[0]:      # Piece_2 is to the left of piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
-                elif piece_2[0] > piece_3[0]:    # Piece_2 is to the right of piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
-            elif piece_1[1] > piece_2[1]:        # Piece_1 is below piece_2
-                if piece_2[0] < piece_3[0]:      # Piece_2 is to the left of piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
-                elif piece_2[0] > piece_3[0]:    # Piece_2 is to the right of piece_3
-                    piece_2[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
-            piece_2[2] = pygame.transform.scale(piece_2[2], TILE_DIMENSIONS)
-            piece_1, piece_2 = piece_2, piece_3
-        
-        # Add assets for tail
-        if self.body[-1][0] < self.body[-2][0]:     # Tail is to the left of the body
-            self.body[-1][2] = pygame.image.load(get_path("assets/tail_left.png")).convert_alpha()
-        elif self.body[-1][0] > self.body[-2][0]:   # Tail is to the right of the body
-            self.body[-1][2] = pygame.image.load(get_path("assets/tail_right.png")).convert_alpha()
-        elif self.body[-1][1] < self.body[-2][1]:   # Tail is above the body
-            self.body[-1][2] = pygame.image.load(get_path("assets/tail_up.png")).convert_alpha()
-        elif self.body[-1][1] > self.body[-2][1]:   # Tail is below the body
-            self.body[-1][2] = pygame.image.load(get_path("assets/tail_down.png")).convert_alpha()
-        self.body[-1][2] = pygame.transform.scale(self.body[-1][2], TILE_DIMENSIONS)
+        # Spawn apple
+        self.apple = [x, y, pygame.image.load(get_path("assets/apple.png")).convert_alpha()]
+        self.apple[2] = pygame.transform.scale(self.apple[2], TILE_DIMENSIONS)
+        # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
 
 
 def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
-    """Draws objects to the screen and updates it
+    """
+    Draws objects to the screen and updates it
 
     Args:
         *args (tuple): Additional objects to be drawn to screen.\n
@@ -233,7 +405,8 @@ def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
         snake (Snake): Snake object.
         apple (list): Apple object.
     """
-    global background
+    global background   # Load background
+    
     # Refill background
     background.fill(DARK_GREEN) # Sets background color
 
@@ -266,145 +439,120 @@ def keyboard_inputs():
     pass
     # For future code cleanup purposes
 
-def spawn_apple(snake: Snake, x: float = 0, y: float = 0) -> list:
-    """
-    Spawns an apple on a random position on the board.
-
-    Args:
-        snake (Snake): Snake object.
-        x (float, optional): X position of the apple. Defaults to 0.
-        y (float, optional): Y position of the apple. Defaults to 0.
-        
-    Returns:
-        list: Apple object with co-ordinates and surface.
-    """
-    # Checks if apple can be spawned on the board
-    good_coordinates_flag = False
-    while not good_coordinates_flag:
-        x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
-        snake_coords = [tile[:2] for tile in snake.body]
-        good_coordinates_flag = not [x,y] in snake_coords
-    apple = [x, y, pygame.image.load(get_path("assets/apple.png")).convert_alpha()]
-    apple[2] = pygame.transform.scale(apple[2], TILE_DIMENSIONS)
-    # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
-    
-    return apple
 
 
 
 def main():
     """
-    Main loop: Run upon execution.
+    ### Main loop: Run upon execution. \n
     Initializes board, variables and begins pygame window-loop.
     """
-    global paused, background, input_disable_guardrail
-    snake = Snake() # Create snake
+    global paused, background   # Load global variables
+    snake = Snake()             # Create snake
     
-    pygame.init() # Initializes pygame module
+    pygame.init()               # Initializes pygame module
     pygame.display.set_caption("Snake") # Sets window title
-    clock = pygame.time.Clock() # FPS object
-    direction = pygame.K_RIGHT
-    loop_ctr = 1
-    # Create apple and ensure it does not spawn on the initial snake head
-    apple = spawn_apple(snake)
+    pygame.display.set_icon(pygame.image.load(get_path("assets/head_up.png"))) # Sets window icon (in the top-left corner of the window)
+    clock = pygame.time.Clock() # Create FPS object
+    loop_ctr = 1                # Loop counter variable
     
     while True:
         """
         Pygame window-loop. Exits upon closing the window
         """
+        # print(f"Loop {loop_ctr}", end="\r")
         
         # Event checking
-        for event in pygame.event.get():    # Gets a list of all events
-            if event.type == QUIT:          # Checks if X is clicked
+        # ===========================================================================
+        event_list = pygame.event.get()     # Gets a list of all events
+        
+        for event in event_list:            # Always check for if X is clicked
+            if event.type == QUIT:          # Event for if X is clicked
                 pygame.quit()               # Closes window
-                sys.exit()                  # Closes program
-            
-            if not paused[0]:   # Pause check
-                if event.type == pygame.KEYDOWN:
-                    # Guard-rails so you can't die by moving directly backwards into yourself
-                    dont_move_this_way = {pygame.K_LEFT: pygame.K_RIGHT, pygame.K_RIGHT: pygame.K_LEFT, pygame.K_UP: pygame.K_DOWN, pygame.K_DOWN: pygame.K_UP}
-                    # Update move direction
-                    if event.key in dont_move_this_way.keys() and dont_move_this_way[event.key] != direction and not input_disable_guardrail:
-                        direction = event.key
-                        # Disable movement until 1 movement has been done
-                        input_disable_guardrail = True
+                sys.exit()                  # Exits program
+        
+        # If game is not paused...
+        if not paused[0]:                   
+            for event in event_list:        # Begin parsing events
+                if event.type == pygame.KEYDOWN:    # If a key is pressed
+                    # If pressed key is a valid direction, add to movement buffer
+                    # ... w/ guard-rails so you can't die by moving directly backwards into yourself
+                    if event.key in snake.dont_move_this_way.keys() and snake.dont_move_this_way[event.key] != snake.direction_buffer[-1]:
+                        if len(snake.direction_buffer) < DIRECTION_BUFFER_LENGTH:
+                            snake.direction_buffer.append(event.key)
+                        elif event.key != snake.dont_move_this_way[snake.direction_buffer[-2]]:
+                            snake.direction_buffer[-1] = event.key
                     
                     # Pause when ESC is pressed
                     if event.key == pygame.K_ESCAPE:
                         paused = [True, "PAUSE"]
-                        
-            else:
-                if paused[1] in ("PAUSE", "START"):
-                # Gray out tiles when paused
-                    for _,_,tile in snake.body:
-                        tile.set_alpha(128)
-                        
+        
+        # If game is paused...
+        else:
+            if paused[1] in ("PAUSE", "START"):     # When paused before game has begun...
+                for _,_,tile in snake.body:         # Turn tiles translucent
+                    tile.set_alpha(128)
+                
+                for event in event_list:            # Unpause after delay when any key is pressed
                     if event.type == pygame.KEYDOWN:
-                        # Delay for 3 seconds before unpausing
-                        for i in range(PAUSE_DELAY):
+                        for i in range(PAUSE_DELAY):    # Aforementioned delay
                             if i%10**3 == 0:
                                 # Display time remaining until unpausing
                                 pause_font = pygame.font.Font(None, 36) # Font object for pause message
                                 text_pause = pause_font.render(str(round(floor(PAUSE_DELAY/10**3) - i/10**3)), 1, (255, 255, 255))
-                                update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake, apple=apple)
-                                pygame.display.update()
-                            sleep(10**-3)
+                                update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake, apple=snake.apple)
+                            pygame.time.wait(1)
                         
-                        # White back tiles when unpaused
-                        for _,_,tile in snake.body:
+                        
+                        for _,_,tile in snake.body: # Return opacity back to tiles once unpaused
                             tile.set_alpha(255)
                             
-                        # Update move direction when unpausing <----- LIFEHACK 👀
+                        # Update move direction when unpausing <----- POTENTIAL LIFEHACK 👀
                         if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
-                            direction = event.key
+                            snake.direction_buffer[0] = event.key
                             
-                        # Unpause
+                        # Finally, unpause
                         paused = [False,""]
                 
-                elif paused[1] == "EXTRA FRAME":
-                    # Wait for given amount of time
-                    sleep(EXTRA_FRAMES*10**-3)
-                    # Unpause
-                    paused = [False,"EXTRA FRAME LIFTED"]
+            elif paused[1] == "EXTRA FRAME":        # When paused for extra frames...
+                pygame.time.wait(EXTRA_FRAMES)      # Wait for given amount of time
                 
-                elif paused[1] == "DEATH":
-                    for _,_,tile in snake.body:
-                        tile.set_alpha(128) # Makes snake body translucent upon death
-                        tile.set_colorkey((20,0,0))
-                        update_screen(snake=snake, apple=apple)
-                    if event.type == pygame.KEYDOWN:
-                        input_disable_guardrail = False
+                paused = [False,"EXTRA FRAME LIFTED"]   # Unpause now that extra frame has been executed
+
+                        
+            elif paused[1] == "DEATH":              # When paused due to snake death...
+                for event in event_list:
+                    if event.type == pygame.KEYDOWN:    
+                        # Restarts game when any key is pressed
                         paused = [True, "START"]
                         snake = Snake()
-                        apple = spawn_apple(snake)
                         loop_ctr = 1
                     
-                elif paused[1] == "WIN":
-                    pass
-                    # TODO:
-                    # What do we do on win?
+            elif paused[1] == "WIN":
+                pass
+                # TODO
+                # What do we do on win?
         
-        
-        # Move snake head when loop_ctr has reset
-        # !!!!! Bad solution as loops are unreliable measurements of time. Consider instead replacing with a time module timer, or using clock.time()/clock.raw_time()
+        # Move snake head every time loop_ctr has reset
+        # ===========================================================================
         if loop_ctr == 1 and not paused[0]:
-            eaten = snake.move(direction, apple)
-            apple = spawn_apple(snake) if eaten else apple
+            snake.move()
 
         
-        # TODO:
+        # TODO
         # Add apple-bag power-up
 
-        update_screen(snake=snake, apple=apple)
+        # Update screen
+        # ===========================================================================
+        update_screen(snake=snake, apple=snake.apple)
         
         # Game loop
-        pygame.display.flip() # Updates screen, completes one loop
-        clock.tick(FPS) # Ensures a max of 60 FPS
-        if loop_ctr % (LOOP_DELAY) == 0: # Loop counter - resets every 50 loops, 
+        # ===========================================================================
+        clock.tick(FPS)                     # Ensures a max of 60 FPS
+        if loop_ctr % (LOOP_DELAY) == 0:    # Increment loop counter
             loop_ctr = 1
         else:
             loop_ctr += 1
-        pygame.display.update() # Updates screen; completes 1 game loop
 
 
 
