@@ -13,5 +13,8 @@ Snake, made in Python from scratch; learning relevant skills as we go.
 Special mention to the rest of our club members for helping us through the process.
 #### Extra special thank you to our club advisor, Professor Stephen Brower!
 
+## Assets:
+Assets for the game were procured from this website: https://opengameart.org/content/snake-game-assets
+
 ## License:
 Content is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
