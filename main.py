@@ -1,7 +1,7 @@
 from rich.traceback import install; install()
 from rich import print
 import pygame, sys, os, random
-from math import floor
+from math import floor, ceil
 from pygame.locals import QUIT
 
 # TODO
@@ -23,18 +23,23 @@ from pygame.locals import QUIT
 # Upon death & during extra frame, snake looks goofy asf -> maybe need more head sprites? Maybe look into rotating/flipping images?
 # If start length is 8 or higher, chance that the snake spawns soft-locked
 
+# Rendered FPS
+# Hit back insta death
+# Apple spawn after win
+# corner tile asset bug
+# Resizable
 
 # CONSTANTS
 # ===========================================================================
 
 FPS = 60                    # Maximum FPS, to avoid CPU overload
-LOOP_DELAY = 10             # We want the game rendered with FPS, 
+LOOP_DELAY = 5              # We want the game rendered with FPS, 
                             # but don't want the code logic to be executed every frame.
                             # The game logic is executed every LOOP_DELAY iterations of the main() loop
                             
 HEIGHT = 500                # Window height
 WIDTH = 500                 # Window width
-GRID_SIZE = (10,10)         # Number of tiles in the grid
+GRID_SIZE = (20,20)         # Number of tiles in the grid
 TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])   # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 3000          # Number of milliseconds to wait before unpausing
 EXTRA_FRAMES = 500          # Number of extra milliseconds to give upon imminent death
@@ -47,7 +52,7 @@ DARK_GREEN = "#006432"      # Background color
 # GLOBAL VARRIABLES
 # ===========================================================================
 paused = [True, "START"]                                        # List that stores pause state and reason
-background = pygame.display.set_mode((WIDTH, HEIGHT))           # Creates a pygame window object with given dimensions
+window = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)           # Creates a pygame window object with given dimensions
 
 
 
@@ -108,9 +113,9 @@ class Snake:
         Args:
             static_growth (bool, optional): If True, the snake will grow without moving. Defaults to False.
         """
-        global paused, background   # Load global variables
+        global paused, window   # Load global variables
 
-# -----> DEBUG PRINT
+# -----> DEBUG PRINTS
         # print(f"Entered move method. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in self.direction_buffer)} \t|\t Paused state: {paused}")
         
         head = self.body[0]
@@ -160,17 +165,17 @@ class Snake:
                 for _ in range(5):          # Blink snake body for 5 cycles upon death
                     for _,_,tile in self.body:
                         tile.set_alpha(0)
-                        update_screen(snake=self, apple=self.apple)
+                        update_screen(snake=self)
                     pygame.time.delay(250)
                     for _,_,tile in self.body:
                         tile.set_alpha(255)
-                        update_screen(snake=self, apple=self.apple)
+                        update_screen(snake=self)
                     pygame.time.delay(250)
                     
                 # Then make snake body translucent
                 for _,_,tile in self.body:
                     tile.set_alpha(128)
-                    update_screen(snake=self, apple=self.apple)
+                    update_screen(snake=self)
                 
                 pygame.event.clear()        # Prevents instant restarts from queueing key press events during death animation
                 paused = [True, "DEATH"]    # Pause the game due to death of snake
@@ -399,7 +404,7 @@ class Snake:
         # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
 
 
-def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
+def update_screen(*args: tuple, snake: Snake) -> None:
     """
     Draws objects to the screen and updates it
 
@@ -407,34 +412,40 @@ def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
         *args (tuple): Additional objects to be drawn to screen.\n
                        Objects must be in the form of (Surface, x, y)
         snake (Snake): Snake object.
-        apple (list): Apple object.
     """
-    global background   # Load background
+    global window   # Load background
     
     # Refill background
-    background.fill(DARK_GREEN) # Sets background color
+    # 
+    window.fill(DARK_GREEN) # Sets background color
 
     # Draw grid
     bgTile = pygame.image.load(get_path("assets/tile.png")).convert_alpha()
     for row in range(TILE_DIMENSIONS[1]):
         for tile in range(TILE_DIMENSIONS[0]):
-            background.blit(bgTile, (tile * TILE_DIMENSIONS[0], row * TILE_DIMENSIONS[1]))
+            window.blit(bgTile, (tile * TILE_DIMENSIONS[0], row * TILE_DIMENSIONS[1]))
     
     # Draw snake
     for tile in snake.body:
-        background.blit(tile[2],(tile[0], tile[1]))
+        window.blit(tile[2],(tile[0], tile[1]))
     
     # Draw apple
-    background.blit(apple[2],(apple[0], apple[1]))
+    window.blit(snake.apple[2],(snake.apple[0], snake.apple[1]))
     
     # Update score counter
-    score_font = pygame.font.Font(None, 36) # Font object for score
-    score_counter = score_font.render(f"{len(snake.body)-1-INITIAL_SNAKE_LENGTH}", 1, (255, 255, 255))
-    background.blit(score_counter, (WIDTH/2, TILE_DIMENSIONS[1]/2))
+    score_font = pygame.font.SysFont("Aptos", 36) # Font object for score
+    score_text = score_font.render(f"{len(snake.body)-1-INITIAL_SNAKE_LENGTH} / {WIN_SCORE_THRESHOLD}", 1, (255, 255, 255))
+    score_apple_image = pygame.image.load(get_path("assets/apple.png")).convert_alpha()
+    score_surface = pygame.Surface((score_apple_image.get_width()+score_text.get_width()+TILE_DIMENSIONS[0]/4, max(score_apple_image.get_height(), score_text.get_height())))
+    score_surface.fill(DARK_GREEN)
+    pygame.draw.rect(score_surface, (0, 0, 0), (0, 0, score_surface.get_width(), score_surface.get_height()), 2)  # black borders
+    score_surface.blit(score_text, (TILE_DIMENSIONS[0]/4, score_surface.get_height()/2 - score_text.get_height()*3/8))
+    score_surface.blit(score_apple_image, (score_text.get_width() + TILE_DIMENSIONS[0]/4, 0))
+    window.blit(score_surface, (WIDTH/2 - score_surface.get_width()/2, score_surface.get_height()/2))
     
     # Draw other objects
     for arg in args:
-        background.blit(arg[0],(arg[1], arg[2]))
+        window.blit(arg[0],(arg[1], arg[2]))
     
     # Update screen
     pygame.display.update()
@@ -443,21 +454,54 @@ def keyboard_inputs():
     pass
     # For future code cleanup purposes
 
+def resize_window(new_window_dimensions: tuple, snake: Snake) -> None:
+    """
+    Resize all assets to fit new window dimensions.
+    
+    Args:
+        new_window_dimensions (tuple): Tuple containing the new dimensions of the window in the form of (width, height)
+        snake (Snake): Snake object
+    """
+    global window                           # Load global variables
+    global WIDTH, HEIGHT, TILE_DIMENSIONS   # Load global CONSTANTS
+    
+    window = pygame.display.set_mode(new_window_dimensions, pygame.RESIZABLE)   # Create window of new dimensions
+    
+    # Resize CONSTANTS
+    old_tile_dimensions = TILE_DIMENSIONS
+    WIDTH, HEIGHT = ceil(new_window_dimensions[0]/GRID_SIZE[0])*GRID_SIZE[0], ceil(new_window_dimensions[1]/GRID_SIZE[1])*GRID_SIZE[1]
+    TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])
+    
+    # Resize snake
+    for piece in snake.body:
+        piece[0], piece[1] = ceil(piece[0]/old_tile_dimensions[0])*TILE_DIMENSIONS[0], ceil(piece[1]/old_tile_dimensions[1])*TILE_DIMENSIONS[1]
+        piece[2] = pygame.transform.scale(piece[2], TILE_DIMENSIONS)
+    
+    # Resize apple
+    snake.apple[0], snake.apple[1] = ceil(snake.apple[0]/old_tile_dimensions[0])*TILE_DIMENSIONS[0], ceil(snake.apple[1]/old_tile_dimensions[1])*TILE_DIMENSIONS[1]
+    snake.apple[2] = pygame.transform.scale(snake.apple[2], TILE_DIMENSIONS)
+    
+# -----> DEBUG PRINT
+    # print(f"Window resized to {WIDTH}x{HEIGHT}\t|\t Tile dimensions: {TILE_DIMENSIONS}")
+    # print(f"Snake head at {snake.body[0][0]},{snake.body[0][1]} \t|\t Right-most coordinates: {WIDTH-TILE_DIMENSIONS[0]}")
+    
+    # Update screen with resized assets
+    update_screen(snake=snake)
 
 
-
-def main():
+def main() -> None:
     """
     ### Main loop: Run upon execution. \n
     Initializes board, variables and begins pygame window-loop.
     """
-    global paused, background   # Load global variables
+    global paused, window       # Load global variables
     snake = Snake()             # Create snake
     
     pygame.init()               # Initializes pygame module
     pygame.display.set_caption("Snake") # Sets window title
     pygame.display.set_icon(pygame.image.load(get_path("assets/head_up.png"))) # Sets window icon (in the top-left corner of the window)
     clock = pygame.time.Clock() # Create FPS object
+    
     loop_ctr = 1                # Loop counter variable
     win_restart_key_ctr = 0     # Key press counter to restart on win
     
@@ -470,10 +514,19 @@ def main():
         # ===========================================================================
         event_list = pygame.event.get()     # Gets a list of all events
         
-        for event in event_list:            # Always check for if X is clicked
+        for event in event_list:            
+            # Always check for if X is clicked
             if event.type == QUIT:          # Event for if X is clicked
                 pygame.quit()               # Closes window
                 sys.exit()                  # Exits program
+            
+            # Always check for if window is resized
+            if event.type == pygame.VIDEORESIZE:                                # Event for if window is resized
+                if event.size[0] < WIDTH or event.size[1] < HEIGHT:             # Check if window was made smaller in any capacity...
+                    new_window_dimensions = (min(event.size),min(event.size))   # ...if so, make the window into a small square
+                else:
+                    new_window_dimensions = (max(event.size),max(event.size))   # ...otherwise, make the window a larger square
+                resize_window(new_window_dimensions, snake)                     # Resize all assets and CONSTANTS accordingly
         
         # If game is not paused...
         if not paused[0]:                   
@@ -504,9 +557,9 @@ def main():
                         for i in range(PAUSE_DELAY):    # Aforementioned delay
                             if i%10**3 == 0:
                                 # Display time remaining until unpausing
-                                pause_font = pygame.font.Font(None, 36) # Font object for pause message
+                                pause_font = pygame.font.SysFont("Aptos", 36) # Font object for pause message
                                 text_pause = pause_font.render(f"{round(floor(PAUSE_DELAY/10**3) - i/10**3)}", 1, (255, 255, 255))
-                                update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake, apple=snake.apple)
+                                update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake)
                             pygame.time.wait(1)
                         
                         
@@ -535,10 +588,10 @@ def main():
                         loop_ctr = 1
                     
             elif paused[1] == "WIN":
-                win_font = pygame.font.Font(None, 36) # Font object for pause message
+                win_font = pygame.font.SysFont("Aptos", 36) # Font object for pause message
                 text_win_1 = win_font.render(f"You Win! =D", 1, (255, 255, 255))
                 text_win_2 = win_font.render(f"Press ESC 3x to restart!", 1, (255, 255, 255))
-                update_screen((text_win_1, WIDTH/2-text_win_1.get_width()/2, HEIGHT/2 ), (text_win_2, WIDTH/2-text_win_2.get_width()/2, HEIGHT/2+text_win_1.get_height()),snake=snake, apple=snake.apple)
+                update_screen((text_win_1, WIDTH/2-text_win_1.get_width()/2, HEIGHT/2 ), (text_win_2, WIDTH/2-text_win_2.get_width()/2, HEIGHT/2+text_win_1.get_height()),snake=snake)
                 
                 for event in event_list:
                     if event.type == pygame.KEYDOWN:
@@ -572,7 +625,7 @@ def main():
 
         # Update screen
         # ===========================================================================
-        update_screen(snake=snake, apple=snake.apple)
+        update_screen(snake=snake)
         
         # Game loop
         # ===========================================================================
