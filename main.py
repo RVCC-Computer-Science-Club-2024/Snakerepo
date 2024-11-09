@@ -7,9 +7,7 @@ from pygame.locals import QUIT
 # TODO
 # ===========================================================================
 # >>>> PRIORITY: HIGH <<<<
-# Win code
-# Better score counter
-# Audio
+# Audio - Maybe explosion gif and audio on death
 # Make background grid pattern less jank
 
 # >>>> PRIORITY: MEDIUM <<<<
