@@ -38,8 +38,9 @@ GRID_SIZE = (10,10)         # Number of tiles in the grid
 TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])   # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 3000          # Number of milliseconds to wait before unpausing
 EXTRA_FRAMES = 500          # Number of extra milliseconds to give upon imminent death
-START_LENGTH = 3            # Number of tiles the snake starts with --- Minimum is 3
+INITIAL_SNAKE_LENGTH = 3    # Number of tiles the snake starts with --- Minimum is 3
 DIRECTION_BUFFER_LENGTH = 3 # Max number of keystrokes to queue up at once
+WIN_SCORE_THRESHOLD = 10    # Score threshold to win
 
 DARK_GREEN = "#006432"      # Background color
 
@@ -88,7 +89,7 @@ class Snake:
         self.direction_buffer = [list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]]
         
         # Add extra initial body tiles to the snake
-        for _ in range(max(3, START_LENGTH-1)):
+        for _ in range(max(3, INITIAL_SNAKE_LENGTH-1)):
             # Generate valid, random direction to move snake in initially
             direction = None
             while not direction or direction == self.dont_move_this_way[self.direction_buffer[-1]]: 
@@ -393,6 +394,7 @@ class Snake:
         # Spawn apple
         self.apple = [x, y, pygame.image.load(get_path("assets/apple.png")).convert_alpha()]
         self.apple[2] = pygame.transform.scale(self.apple[2], TILE_DIMENSIONS)
+        
 # -----> DEBUG PRINT
         # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
 
@@ -427,7 +429,7 @@ def update_screen(*args: tuple, snake: Snake, apple: list) -> None:
     
     # Update score counter
     score_font = pygame.font.Font(None, 36) # Font object for score
-    score_counter = score_font.render(str(len(snake.body)-START_LENGTH), 1, (255, 255, 255))
+    score_counter = score_font.render(f"{len(snake.body)-1-INITIAL_SNAKE_LENGTH}", 1, (255, 255, 255))
     background.blit(score_counter, (WIDTH/2, TILE_DIMENSIONS[1]/2))
     
     # Draw other objects
@@ -457,6 +459,7 @@ def main():
     pygame.display.set_icon(pygame.image.load(get_path("assets/head_up.png"))) # Sets window icon (in the top-left corner of the window)
     clock = pygame.time.Clock() # Create FPS object
     loop_ctr = 1                # Loop counter variable
+    win_restart_key_ctr = 0     # Key press counter to restart on win
     
     while True:
         """
@@ -502,7 +505,7 @@ def main():
                             if i%10**3 == 0:
                                 # Display time remaining until unpausing
                                 pause_font = pygame.font.Font(None, 36) # Font object for pause message
-                                text_pause = pause_font.render(str(round(floor(PAUSE_DELAY/10**3) - i/10**3)), 1, (255, 255, 255))
+                                text_pause = pause_font.render(f"{round(floor(PAUSE_DELAY/10**3) - i/10**3)}", 1, (255, 255, 255))
                                 update_screen((text_pause, WIDTH/2, HEIGHT/2),snake=snake, apple=snake.apple)
                             pygame.time.wait(1)
                         
@@ -525,21 +528,41 @@ def main():
                         
             elif paused[1] == "DEATH":              # When paused due to snake death...
                 for event in event_list:
-                    if event.type == pygame.KEYDOWN:    
+                    if event.type == pygame.KEYDOWN:
                         # Restarts game when any key is pressed
                         paused = [True, "START"]
                         snake = Snake()
                         loop_ctr = 1
                     
             elif paused[1] == "WIN":
-                pass
-                # TODO
-                # What do we do on win?
+                win_font = pygame.font.Font(None, 36) # Font object for pause message
+                text_win_1 = win_font.render(f"You Win! =D", 1, (255, 255, 255))
+                text_win_2 = win_font.render(f"Press ESC 3x to restart!", 1, (255, 255, 255))
+                update_screen((text_win_1, WIDTH/2-text_win_1.get_width()/2, HEIGHT/2 ), (text_win_2, WIDTH/2-text_win_2.get_width()/2, HEIGHT/2+text_win_1.get_height()),snake=snake, apple=snake.apple)
+                
+                for event in event_list:
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            win_restart_key_ctr += 1
+                        
+                # Restarts game when conditions are met
+                if win_restart_key_ctr == 3:
+                    paused = [True, "START"]
+                    snake = Snake()
+                    loop_ctr = 1
+                    win_restart_key_ctr = 0
+                
+                continue
         
         # Move snake head every time loop_ctr has reset
         # ===========================================================================
         if loop_ctr == 1 and not paused[0]:
             snake.move()
+        
+        # Win condition check
+        # ===========================================================================
+        if len(snake.body) - 1 - INITIAL_SNAKE_LENGTH == WIN_SCORE_THRESHOLD:
+            paused = [True, "WIN"]
         
 # -----> DEBUG PRINT
         # print(f"Main method ticked. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in snake.direction_buffer)} \t|\t Paused state: {paused} \t|\t Loop counter: {loop_ctr}")
