@@ -38,8 +38,8 @@ GRID_SIZE = (10,10)         # Number of tiles in the grid
 TILE_DIMENSIONS = (WIDTH//GRID_SIZE[0], HEIGHT//GRID_SIZE[1])   # Calculate dimensions of snake tile based on grid & and window dimensions
 PAUSE_DELAY = 3000          # Number of milliseconds to wait before unpausing
 EXTRA_FRAMES = 500          # Number of extra milliseconds to give upon imminent death
-START_LENGTH = 3
-DIRECTION_BUFFER_LENGTH = 3
+START_LENGTH = 3            # Number of tiles the snake starts with --- Minimum is 3
+DIRECTION_BUFFER_LENGTH = 3 # Max number of keystrokes to queue up at once
 
 DARK_GREEN = "#006432"      # Background color
 
@@ -76,6 +76,9 @@ class Snake:
         """
         # Initialize body
         self.body = [[random.randint(0,GRID_SIZE[0]-1)*TILE_DIMENSIONS[0],random.randint(0,GRID_SIZE[1]-1)*TILE_DIMENSIONS[1],pygame.image.load(get_path("assets/head_up.png")).convert_alpha()]]
+         
+        # Spawn initial apple
+        self.spawn_apple()
         
         # List of invalid directions
         # Guardrails to prevent you from dying by moving directly backwards into yourself
@@ -85,25 +88,29 @@ class Snake:
         self.direction_buffer = [list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]]
         
         # Add extra initial body tiles to the snake
-        for _ in range(START_LENGTH-1):
+        for _ in range(max(3, START_LENGTH-1)):
+            # Generate valid, random direction to move snake in initially
             direction = None
             while not direction or direction == self.dont_move_this_way[self.direction_buffer[-1]]: 
                 direction = list(self.dont_move_this_way.keys())[random.randint(0,len(self.dont_move_this_way)-1)]
-            self.direction_buffer.append(direction)
-            self.spawn_apple(self.body[0][0], self.body[0][1])
-            self.move()
-        
-        # Spawn initial apple
-        self.spawn_apple()
+            
+            self.direction_buffer.append(direction)             # Add direction to buffer
+            self.move(static_growth=True)                                         # Move snake and repeat
+
         
 
-    def move(self):
+    def move(self, static_growth: bool = False):
         """
         Moves the snake in a specified direction. \n
         Takes care of associated logic, such as collision detection, snake growth, etc.
+        
+        Args:
+            static_growth (bool, optional): If True, the snake will grow without moving. Defaults to False.
         """
         global paused, background   # Load global variables
-        
+
+# -----> DEBUG PRINT
+        # print(f"Entered move method. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in self.direction_buffer)} \t|\t Paused state: {paused}")
         
         head = self.body[0]
         newhead = [0,0,None]    # Initialize new head
@@ -147,29 +154,28 @@ class Snake:
         # Death check - Check if snake has collided with itself
         # ===========================================================================
         if not paused[0]:               # Skip death check if extra frame was just activated
-            for tile in self.body[1:]:  # ...otherwise check for death
-                if newhead[0] == tile[0] and newhead[1] == tile[1]:
-                    # Snake death animation:
-                    for _ in range(5):          # Blink snake body for 5 cycles upon death
-                        for _,_,tile in self.body:
-                            tile.set_alpha(0)
-                            update_screen(snake=self, apple=self.apple)
-                        pygame.time.delay(250)
-                        for _,_,tile in self.body:
-                            tile.set_alpha(255)
-                            update_screen(snake=self, apple=self.apple)
-                        pygame.time.delay(250)
-                        
-                    # Then make snake body translucent
+            if newhead[:2] in [tile[:2] for tile in self.body[1:]]:  # ...otherwise check for death
+                # Snake death animation:
+                for _ in range(5):          # Blink snake body for 5 cycles upon death
                     for _,_,tile in self.body:
-                        tile.set_alpha(128)
+                        tile.set_alpha(0)
                         update_screen(snake=self, apple=self.apple)
+                    pygame.time.delay(250)
+                    for _,_,tile in self.body:
+                        tile.set_alpha(255)
+                        update_screen(snake=self, apple=self.apple)
+                    pygame.time.delay(250)
                     
+                # Then make snake body translucent
+                for _,_,tile in self.body:
+                    tile.set_alpha(128)
+                    update_screen(snake=self, apple=self.apple)
+                
                 pygame.event.clear()        # Prevents instant restarts from queueing key press events during death animation
                 paused = [True, "DEATH"]    # Pause the game due to death of snake
                 
         
-        # Head addition & snake growth
+        # Tack on new head (for snake movement) & handle snake growth
         # ===========================================================================
         if not paused[0] or paused[1] == "START":   # Skip if extra frame was just actvated
                                                     # Do not skip if game is paused due to it having just started 
@@ -182,12 +188,13 @@ class Snake:
             # ...if not, remove last body tile
             if newhead[0] == self.apple[0] and newhead[1] == self.apple[1]:
                 self.spawn_apple()
-            else:
+            elif not static_growth:
                 self.body.pop()
         
         # Apply assets to snake body
         # ===========================================================================
-        self.apply_assets()
+        if len(self.body) >= 3:      # Only necessary to apply assets once the snake has spawned
+            self.apply_assets()
         
         # Reduce buffer
         # ===========================================================================
@@ -372,26 +379,21 @@ class Snake:
             tail[2] = pygame.image.load(get_path("assets/tail_down.png")).convert_alpha()
         tail[2] = pygame.transform.scale(tail[2], TILE_DIMENSIONS)
     
-    
-    def spawn_apple(self, x: float = 0, y: float = 0):
+    def spawn_apple(self):
         """
-        Spawns an apple on a random position on the board. \n
-        Stored as a list field of the snake object in the form of [x, y, Surface]
-
-        Args:
-            x (float, optional): X position of the apple. Defaults to 0.
-            y (float, optional): Y position of the apple. Defaults to 0.
-        """
+        Spawns an apple object on a random position on the board. \n
+        Apple object is stored as a list field of the snake object in the form of [x, y, Surface]"""
         # Find valid coordinates to spawn apple
+        snake_coords = [tile[:2] for tile in self.body[1:]]             # List of coordinates of tiles of the snake body
         good_coordinates_flag = False
         while not good_coordinates_flag:
-            x,y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
-            snake_coords = [tile[:2] for tile in self.body]
+            x, y = random.randint(0, GRID_SIZE[0]-1)*TILE_DIMENSIONS[0], random.randint(0, GRID_SIZE[1]-1)*TILE_DIMENSIONS[1]
             good_coordinates_flag = not [x,y] in snake_coords
         
         # Spawn apple
         self.apple = [x, y, pygame.image.load(get_path("assets/apple.png")).convert_alpha()]
         self.apple[2] = pygame.transform.scale(self.apple[2], TILE_DIMENSIONS)
+# -----> DEBUG PRINT
         # print(f"Apple spawned at: {apple[0]/TILE_DIMENSIONS[0]},{apple[1]/TILE_DIMENSIONS[1]}", end="\r")
 
 
@@ -460,7 +462,6 @@ def main():
         """
         Pygame window-loop. Exits upon closing the window
         """
-        # print(f"Loop {loop_ctr}", end="\r")
         
         # Event checking
         # ===========================================================================
@@ -478,8 +479,10 @@ def main():
                     # If pressed key is a valid direction, add to movement buffer
                     # ... w/ guard-rails so you can't die by moving directly backwards into yourself
                     if event.key in snake.dont_move_this_way.keys() and snake.dont_move_this_way[event.key] != snake.direction_buffer[-1]:
+                        # Add key to buffer if buffer is not full
                         if len(snake.direction_buffer) < DIRECTION_BUFFER_LENGTH:
                             snake.direction_buffer.append(event.key)
+                        # If buffer is full, overwrite most recent key
                         elif event.key != snake.dont_move_this_way[snake.direction_buffer[-2]]:
                             snake.direction_buffer[-1] = event.key
                     
@@ -537,7 +540,9 @@ def main():
         # ===========================================================================
         if loop_ctr == 1 and not paused[0]:
             snake.move()
-
+        
+# -----> DEBUG PRINT
+        # print(f"Main method ticked. \t|\t Direction buffer: {list(pygame.key.name(direction) for direction in snake.direction_buffer)} \t|\t Paused state: {paused} \t|\t Loop counter: {loop_ctr}")
         
         # TODO
         # Add apple-bag power-up
