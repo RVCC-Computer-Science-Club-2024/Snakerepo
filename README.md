@@ -1,5 +1,5 @@
 # Snake in Python 🕶️
-#### A project enacted by the **RVCC Computer Science Club** *Class of 2024* <br>
+#### A project enacted by the **RVCC Computer Science Club** *2024* <br>
 Snake, made in Python from scratch; learning relevant skills as we go.
 
 ## Contributors:
@@ -8,11 +8,13 @@ Snake, made in Python from scratch; learning relevant skills as we go.
 **Carter Hunt** (VP of Info/Media) <br>
 **Andrew Nashed** (SGA Representative) <br>
 **Michael Biondi** (VP of Finance) <br>
-**Somachi Opara** <br>
-**Ekaterina Elfimova** <br>
-**Jason Deitz** <br>
-**Minerva Paulet** <br>
-**Jose Moreno** <br>
+**Federico Perelman** <br>
+
+Special mention to the rest of our club members for helping us through the process.
+#### Extra special thank you to our club advisor, Professor Stephen Brower!
+
+## Assets:
+Assets for the game were procured from this website: https://opengameart.org/content/snake-game-assets
 
 ## License:
 Content is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
