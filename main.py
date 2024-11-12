@@ -1,6 +1,6 @@
 from rich.traceback import install; install()
 from rich import print
-import pygame, sys, os, random
+import pygame, gif_pygame, sys, os, random
 from math import floor, ceil
 from pygame.locals import QUIT
 
@@ -29,7 +29,6 @@ from pygame.locals import QUIT
 
 # CONSTANTS
 # ===========================================================================
-
 FPS = 60                    # Maximum FPS, to avoid CPU overload
 LOOP_DELAY = 5              # We want the game rendered with FPS, 
                             # but don't want the code logic to be executed every frame.
@@ -48,9 +47,9 @@ WIN_SCORE_THRESHOLD = 25    # Score threshold to win
 
 DARK_GREEN = "#006432"      # Background color
 
-# GLOBAL VARRIABLES
+# GLOBAL VARIABLES
 # ===========================================================================
-paused = [True, "START"]                                        # List that stores pause state and reason
+paused = [True, "WIN"]                                        # List that stores pause state and reason
 window = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)           # Creates a pygame window object with given dimensions
 
 
@@ -131,22 +130,22 @@ class Snake:
             if head[0] == 0:
                 newhead = [WIDTH-TILE_DIMENSIONS[0], head[1]]   # Screen wrap movement
             else:
-                newhead = [head[0]-TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
+                newhead = [head[0]-TILE_DIMENSIONS[0], head[1]] # otherwise move normally
         elif self.direction_buffer_queue[0] == pygame.K_RIGHT:  # If moving right...
             if head[0] == WIDTH-TILE_DIMENSIONS[0]:
                 newhead = [0, head[1]]                          # Screen wrap movement
             else:
-                newhead = [head[0]+TILE_DIMENSIONS[0], head[1]] # otherwise move nromally
+                newhead = [head[0]+TILE_DIMENSIONS[0], head[1]] # otherwise move normally
         elif self.direction_buffer_queue[0] == pygame.K_UP:     # If moving up...
             if head[1] == 0:
                 newhead = [head[0], HEIGHT-TILE_DIMENSIONS[1]]  # Screen wrap movement
             else:
-                newhead = [head[0], head[1]-TILE_DIMENSIONS[1]] # otherwise move nromally
+                newhead = [head[0], head[1]-TILE_DIMENSIONS[1]] # otherwise move normally
         elif self.direction_buffer_queue[0] == pygame.K_DOWN:   # If moving down...
             if head[1] == HEIGHT-TILE_DIMENSIONS[1]:
                 newhead = [head[0], 0]                          # Screen wrap movement
             else:
-                newhead = [head[0], head[1]+TILE_DIMENSIONS[1]] # otherwise move nromally
+                newhead = [head[0], head[1]+TILE_DIMENSIONS[1]] # otherwise move normally
         
         
         # Add extra frame if snake is about to collide with itself
@@ -371,6 +370,45 @@ class Snake:
                     # aka up-down wrap to left
                     elif current_tile[0] > headward_tile[0]:
                         current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+
+            # Screen wrap corner checks
+            # ==========================
+            # current tile in top left corner
+            if current_tile[0] == 0 and current_tile[1] == 0 and ((
+                tailward_tile[0] == 0 and tailward_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and 
+                headward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and headward_tile[1] == 0
+                ) or (
+                tailward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and tailward_tile[1] == 0 and 
+                headward_tile[0] == 0 and headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]
+                )):
+                current_tile[2] = pygame.image.load(get_path("assets/body_topleft.png")).convert_alpha()
+            # current tile in top right corner
+            elif current_tile[0] == WIDTH-TILE_DIMENSIONS[0] and current_tile[1] == 0 and ((
+                tailward_tile[0] == 0 and tailward_tile[1] == 0 and 
+                headward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]
+                ) or (
+                tailward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and tailward_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and 
+                headward_tile[0] == 0 and headward_tile[1] == 0
+                )):
+                current_tile[2] = pygame.image.load(get_path("assets/body_topright.png")).convert_alpha()
+            # current tile in bottom left corner
+            elif current_tile[0] == 0 and current_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and ((
+                tailward_tile[0] == 0 and tailward_tile[1] == 0 and 
+                headward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]
+                ) or (
+                tailward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and tailward_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and 
+                headward_tile[0] == 0 and headward_tile[1] == 0
+                )):
+                current_tile[2] = pygame.image.load(get_path("assets/body_bottomleft.png")).convert_alpha()
+            # current tile in bottom right corner
+            elif current_tile[0] == WIDTH-TILE_DIMENSIONS[0] and current_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and ((
+                tailward_tile[0] == 0 and tailward_tile[1] == HEIGHT-TILE_DIMENSIONS[1] and 
+                headward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and headward_tile[1] == 0
+                ) or (
+                tailward_tile[0] == WIDTH-TILE_DIMENSIONS[0] and tailward_tile[1] == 0 and 
+                headward_tile[0] == 0 and headward_tile[1] == HEIGHT-TILE_DIMENSIONS[1]
+                )):
+                current_tile[2] = pygame.image.load(get_path("assets/body_bottomright.png")).convert_alpha()
             current_tile[2] = pygame.transform.scale(current_tile[2], TILE_DIMENSIONS)
             headward_tile, current_tile = current_tile, tailward_tile
         
@@ -442,7 +480,7 @@ def update_screen(*args: tuple, snake: Snake) -> None:
     
     # Update score counter
     score_font = pygame.font.SysFont("Aptos", 36) # Font object for score
-    score_text = score_font.render(f"{len(snake.body)-INITIAL_SNAKE_LENGTH} / {WIN_SCORE_THRESHOLD}", 1, (255, 255, 255))
+    score_text = score_font.render(f"{len(snake.body)-INITIAL_SNAKE_LENGTH} / {WIN_SCORE_THRESHOLD}", True, (255, 255, 255))
     score_apple_image = pygame.image.load(get_path("assets/apple.png")).convert_alpha()
     score_surface = pygame.Surface((score_apple_image.get_width()+score_text.get_width()+TILE_DIMENSIONS[0]/4, max(score_apple_image.get_height(), score_text.get_height())))
     score_surface.fill(DARK_GREEN)
@@ -567,7 +605,7 @@ def main() -> None:
                             if i%floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS) == 0:
                                 # Display countdown
                                 pause_font = pygame.font.SysFont("Aptos", 64) # Font object for pause message
-                                text_pause = pause_font.render(f"{(PAUSE_DELAY-i)//floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS)}", 1, (255, 255, 255))
+                                text_pause = pause_font.render(f"{(PAUSE_DELAY-i)//floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS)}", True, (255, 255, 255))
                                 update_screen((text_pause, WIDTH/2 - text_pause.get_height()/2, HEIGHT/2 - text_pause.get_width()/2),snake=snake)
                             pygame.time.wait(1)
                         
@@ -598,8 +636,8 @@ def main() -> None:
                     
             elif paused[1] == "WIN":
                 win_font = pygame.font.SysFont("Aptos", 36) # Font object for pause message
-                text_win_1 = win_font.render(f"You Win! =D", 1, (255, 255, 255))
-                text_win_2 = win_font.render(f"Press ESC 3 times to restart!", 1, (255, 255, 255))
+                text_win_1 = win_font.render(f"You Win! =D", True, (255, 255, 255))
+                text_win_2 = win_font.render(f"Press ESC 3 times to restart!", True, (255, 255, 255))
                 update_screen((text_win_1, WIDTH/2-text_win_1.get_width()/2, HEIGHT/2 ), (text_win_2, WIDTH/2-text_win_2.get_width()/2, HEIGHT/2+text_win_1.get_height()),snake=snake)
                 
                 for event in event_list:
