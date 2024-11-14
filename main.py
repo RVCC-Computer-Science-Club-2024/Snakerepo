@@ -670,7 +670,7 @@ def main() -> None:
                             pygame.mixer.find_channel().play(arcade_sfx[random.randint(0,len(arcade_sfx)-1)])
                     
                     # Pause when ESC is pressed
-                    if event.key == pygame.K_ESCAPE:
+                    if event.key == pygame.K_SPACE:
                         paused = [True, "PAUSE"]
                         snake.apply_assets()        # Refresh snake assets to make it translucent
         
@@ -713,7 +713,7 @@ def main() -> None:
                                         snake.direction_buffer_queue[-1] = event.key
                             
                                 # Waste away any addition escape key presses while unpausing
-                                if event.key == pygame.K_ESCAPE:
+                                if event.key == pygame.K_SPACE:
                                     pass
                         
                         # Play random arcade sfx
