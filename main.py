@@ -704,16 +704,17 @@ def main() -> None:
                         for event in pygame.event.get():    
                             # Update move direction when unpausing <----- POTENTIAL LIFEHACK 👀
                             # Copy of move logic and checks from above
-                            if event.key in snake.dont_move_this_way.keys():
-                                if len(snake.direction_buffer_queue) < DIRECTION_BUFFER_LENGTH:
-                                    if event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-1]]:
-                                        snake.direction_buffer_queue.append(event.key)
-                                elif event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-2]]:
-                                    snake.direction_buffer_queue[-1] = event.key
-                        
-                            # Waste away any addition escape key presses while unpausing
-                            if event.key == pygame.K_ESCAPE:
-                                pass
+                            if event.type == pygame.KEYDOWN:
+                                if event.key in snake.dont_move_this_way.keys():
+                                    if len(snake.direction_buffer_queue) < DIRECTION_BUFFER_LENGTH:
+                                        if event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-1]]:
+                                            snake.direction_buffer_queue.append(event.key)
+                                    elif event.key != snake.dont_move_this_way[snake.direction_buffer_queue[-2]]:
+                                        snake.direction_buffer_queue[-1] = event.key
+                            
+                                # Waste away any addition escape key presses while unpausing
+                                if event.key == pygame.K_ESCAPE:
+                                    pass
                         
                         # Play random arcade sfx
                         pygame.mixer.find_channel().play(arcade_sfx[random.randint(0,len(arcade_sfx)-1)])
