@@ -68,7 +68,7 @@ paused = [True, "START"]                                                # List t
 window = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)     # Creates a pygame window object with given dimensions
 gifs = {                                                                # Dictionary of used GIFs
     "timer": 0,
-    "explosion": gif_pygame.load(get_path("assets/gifs/explosion.gif")),
+    "explosion": gif_pygame.load(get_path("assets/gifs/game over.gif")),
     "firework": gif_pygame.load(get_path("assets/gifs/firework.gif")),
     "confetti": gif_pygame.load(get_path("assets/gifs/confetti.gif")),
     "sparkles": gif_pygame.load(get_path("assets/gifs/sparkles.gif"))
@@ -183,7 +183,7 @@ class Snake:
         if not paused[0]:               # Skip death check if extra frame was just activated
             if newhead[:2] in [tile[:2] for tile in self.body[1:]]:  # ...otherwise check for death
                 # Play explosion sfx
-                explosion_sfx = pygame.mixer.Sound(get_path("assets/audio/explosion.mp3"))
+                explosion_sfx = pygame.mixer.Sound(get_path("assets/audio/game over.mp3"))
                 explosion_sfx.set_volume(LOSE_VOLUME)
                 pygame.mixer.find_channel().play(explosion_sfx)
                 # Set start timer to let the explosion gif play out once
@@ -682,10 +682,22 @@ def main() -> None:
                     if event.type == pygame.KEYDOWN:
                         for i in range(PAUSE_DELAY):    # Aforementioned delay
                             if i%floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS) == 0:
-                                # Display countdown
-                                pause_font = pygame.font.SysFont("Aptos", 64) # Font object for pause message
-                                text_pause = pause_font.render(f"{(PAUSE_DELAY-i)//floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS)}", True, (255, 255, 255))
-                                update_screen((text_pause, WIDTH/2 - text_pause.get_height()/2, HEIGHT/2 - text_pause.get_width()/2),snake=snake)
+                                # If we're on the last frame of the countdown play special sfx...
+                                if i/floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS) == NO_OF_COUNTDOWN_MSGS:
+                                    timer_sfx = pygame.mixer.Sound(get_path("assets/audio/timer finished.mp3"))
+                                    timer_sfx.set_volume(ARCADE_VOLUME)
+                                    pygame.mixer.find_channel().play(timer_sfx)
+                                # ...otherwise play normal sfx and display msg
+                                else:
+                                    # Play timer sfx
+                                    timer_sfx = pygame.mixer.Sound(get_path("assets/audio/timer beep.mp3"))
+                                    timer_sfx.set_volume(ARCADE_VOLUME)
+                                    pygame.mixer.find_channel().play(timer_sfx)
+                                    
+                                    # Display countdown
+                                    pause_font = pygame.font.SysFont("Aptos", 64) # Font object for pause message
+                                    text_pause = pause_font.render(f"{(PAUSE_DELAY-i)//floor(PAUSE_DELAY/NO_OF_COUNTDOWN_MSGS)}", True, (255, 255, 255))
+                                    update_screen((text_pause, WIDTH/2 - text_pause.get_height()/2, HEIGHT/2 - text_pause.get_width()/2),snake=snake)
                             pygame.time.wait(1)
                         
                         # While unpausing, parse key events
