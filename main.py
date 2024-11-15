@@ -769,7 +769,7 @@ def main() -> None:
             # Pause game
             paused = [True, "WIN"]
             # Play win cheer sfx
-            cheer_sfx = pygame.mixer.Sound(get_path("assets/audio/cronch.mp3"))
+            cheer_sfx = pygame.mixer.Sound(get_path("assets/audio/cheer.mp3"))
             cheer_sfx.set_volume(WIN_VOLUME)
             pygame.mixer.find_channel().play(cheer_sfx)
         
